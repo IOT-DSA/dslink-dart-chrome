@@ -1,12 +1,15 @@
 import "dart:async";
-import "dart:html";
 
 import "package:dslink/browser_client.dart";
 import "package:dslink/responder.dart";
 import "package:dslink/src/crypto/pk.dart";
 
-import "package:chrome/chrome_app.dart" as chrome;
+import "package:chrome/chrome_ext.dart" as chrome;
 import "package:chrome/gen/tts.dart";
+import "package:chrome/gen/top_sites.dart";
+import "package:chrome/gen/tabs.dart";
+
+import "package:crypto/crypto.dart";
 
 BrowserECDHLink link;
 SimpleNodeProvider provider;
@@ -29,9 +32,13 @@ main() async {
       r"$name": "Idle State",
       r"$type": "enum[active,idle,locked]",
       "?value": "active"
+    },
+    "Most_Visited_Sites": {
+      r"$name": "Most Visited Sites",
     }
   }, {
-    "speak": (String path) => new SpeakNode(path)
+    "speak": (String path) => new SpeakNode(path),
+    "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path)
   });
 
   var localStorage = chrome.storage.local;
@@ -58,7 +65,52 @@ main() async {
   await link.connect();
 }
 
+Timer timer;
+
+String lastMostVisitedSha;
+
 setup() async {
+  timer = new Timer.periodic(new Duration(seconds: 5), (_) async {
+    List<MostVisitedURL> topSites = await chrome.topSites.get();
+
+    var datas = [];
+    for (var x in topSites) {
+      datas.addAll(x.url.codeUnits);
+      datas.add("|".codeUnitAt(0));
+      datas.addAll(x.title.codeUnits);
+      datas.add("|".codeUnitAt(0));
+    }
+
+    var s = CryptoUtils.bytesToHex((new SHA1()..add(datas)).close());
+
+    if (lastMostVisitedSha == null || lastMostVisitedSha != s) {
+      var c = n("/Most_Visited_Sites");
+      lastMostVisitedSha = s;
+      for (var x in c.children.keys) {
+        c.removeChild(x);
+      }
+
+      for (var x in topSites) {
+        var id = CryptoUtils.bytesToHex((new SHA1()..add(x.url.codeUnits)..add(x.title.codeUnits)).close());
+
+        provider.addNode("/Most_Visited_Sites/${id}", {
+        r"$name": x.title,
+        "URL": {
+        r"$type": "string",
+        "?value": x.url
+        },
+        "Open": {
+          r"$is": "openMostVisitedSite",
+          r"$invokable": "write",
+          r"$result": "values",
+          r"$params": [],
+          r"$columns": []
+        }
+        });
+      }
+    }
+  });
+
   chrome.idle.onStateChanged.listen((state) {
     n("/Idle_State").updateValue(state);
   });
@@ -81,6 +133,18 @@ class SpeakNode extends SimpleNode {
 
     chrome.tts.speak(params["text"], ttsOptions);
 
+    return {};
+  }
+}
+
+class OpenMostVisitedSiteNode extends SimpleNode {
+  OpenMostVisitedSiteNode(String path) : super(path);
+
+  @override
+  Object onInvoke(Map<String, dynamic> params) {
+    var p = path.split("/").take(3).join("/");
+    var url = (provider.getNode(p).getChild("URL") as SimpleNode).lastValueUpdate.value;
+    chrome.tabs.create(new TabsCreateParams(url: url, active: true));
     return {};
   }
 }

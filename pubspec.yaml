@@ -5,6 +5,7 @@ dependencies:
   chrome: ">=0.6.5 <0.7.0"
   dslink:
     git: https://github.com/IOT-DSA/sdk-dslink-dart.git
+  crypto: ">=0.9.0 <1.0.0"
 transformers:
 - chrome
 - $dart2js:
