@@ -26,6 +26,7 @@ main() async {
       r"$columns": []
     },
     "Idle_State": {
+      r"$name": "Idle State",
       r"$type": "enum[active,idle,locked]",
       "?value": "active"
     }
