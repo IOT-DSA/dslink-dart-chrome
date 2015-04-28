@@ -2,6 +2,12 @@
 
 A DSLink that runs as a Chrome Extension.
 
+## Features
+
+- Text-to-Speech
+- Idle State
+- Most Visited Sites
+
 ## Usage
 
 ```bash
