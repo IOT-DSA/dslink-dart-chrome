@@ -118,18 +118,23 @@ setup() async {
         var id = CryptoUtils.bytesToHex((new SHA1()..add(x.url.codeUnits)..add(x.title.codeUnits)).close());
 
         provider.addNode("/Most_Visited_Sites/${id}", {
-        r"$name": x.title,
-        "URL": {
-        r"$type": "string",
-        "?value": x.url
-        },
-        "Open": {
-          r"$is": "openMostVisitedSite",
-          r"$invokable": "write",
-          r"$result": "values",
-          r"$params": [],
-          r"$columns": []
-        }
+          r"$name": x.title,
+          "URL": {
+            r"$type": "string",
+            "?value": x.url
+          },
+          "Open": {
+            r"$is": "openMostVisitedSite",
+            r"$invokable": "write",
+            r"$result": "values",
+            r"$params": [],
+            r"$columns": [
+              {
+                "name": "tab",
+                "type": "int"
+              }
+            ]
+          }
         });
       }
     }
@@ -172,7 +177,7 @@ class OpenTabNode extends SimpleNode {
     var active = params["active"];
 
     Tab tab = await chrome.tabs.create(new TabsCreateParams(url: url, active: active));
-    
+
     return {
       "tab": tab.id
     };
@@ -183,11 +188,13 @@ class OpenMostVisitedSiteNode extends SimpleNode {
   OpenMostVisitedSiteNode(String path) : super(path);
 
   @override
-  Object onInvoke(Map<String, dynamic> params) {
+  onInvoke(Map<String, dynamic> params) async {
     var p = path.split("/").take(3).join("/");
     var url = (provider.getNode(p).getChild("URL") as SimpleNode).lastValueUpdate.value;
-    chrome.tabs.create(new TabsCreateParams(url: url, active: true));
-    return {};
+    var tab = await chrome.tabs.create(new TabsCreateParams(url: url, active: true));
+    return {
+      "tab": tab.id
+    };
   }
 }
 
