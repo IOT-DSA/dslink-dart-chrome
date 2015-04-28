@@ -16,6 +16,22 @@ SimpleNodeProvider provider;
 
 main() async {
   provider = new SimpleNodeProvider({
+    "Open_Tab": {
+      r"$name": "Open Tab",
+      r"$invokable": "write",
+      r"$result": "values",
+      r"$params": [
+        {
+          "name": "url",
+          "type": "string"
+        },
+        {
+          "name": "active",
+          "type": "bool"
+        }
+      ],
+      r"$columns": []
+    },
     "Speak": {
       r"$is": "speak",
       r"$invokable": "write",
@@ -134,6 +150,20 @@ class SpeakNode extends SimpleNode {
     chrome.tts.speak(params["text"], ttsOptions);
 
     return {};
+  }
+}
+
+class OpenTabNode extends SimpleNode {
+  OpenTabNode(String path) : super(path);
+
+  @override
+  Object onInvoke(Map<String, dynamic> params) {
+    if (params["url"] == null) return {};
+
+    var url = params["url"];
+    var active = params["active"];
+
+    chrome.tabs.create(new TabsCreateParams(url: url));
   }
 }
 
