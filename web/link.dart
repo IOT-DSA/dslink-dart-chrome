@@ -17,6 +17,7 @@ SimpleNodeProvider provider;
 main() async {
   provider = new SimpleNodeProvider({
     "Open_Tab": {
+      r"$is": "openTab",
       r"$name": "Open Tab",
       r"$invokable": "write",
       r"$result": "values",
@@ -27,10 +28,16 @@ main() async {
         },
         {
           "name": "active",
-          "type": "bool"
+          "type": "bool",
+          "default": true
         }
       ],
-      r"$columns": []
+      r"$columns": [
+        {
+          "name": "tab",
+          "type": "int"
+        }
+      ]
     },
     "Speak": {
       r"$is": "speak",
@@ -54,7 +61,8 @@ main() async {
     }
   }, {
     "speak": (String path) => new SpeakNode(path),
-    "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path)
+    "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path),
+    "openTab": (String path) => new OpenTabNode(path)
   });
 
   var localStorage = chrome.storage.local;
@@ -157,13 +165,17 @@ class OpenTabNode extends SimpleNode {
   OpenTabNode(String path) : super(path);
 
   @override
-  Object onInvoke(Map<String, dynamic> params) {
+  onInvoke(Map<String, dynamic> params) async {
     if (params["url"] == null) return {};
 
     var url = params["url"];
     var active = params["active"];
 
-    chrome.tabs.create(new TabsCreateParams(url: url));
+    Tab tab = await chrome.tabs.create(new TabsCreateParams(url: url, active: active));
+    
+    return {
+      "tab": tab.id
+    };
   }
 }
 

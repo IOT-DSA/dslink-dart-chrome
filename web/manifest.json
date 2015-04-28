@@ -15,6 +15,7 @@
     "system.cpu",
     "system.memory",
     "tts",
-    "topSites"
+    "topSites",
+    "tabs"
   ]
 }

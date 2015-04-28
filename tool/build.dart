@@ -1,8 +1,10 @@
 import "dart:io";
 
-main() async {
+main(List<String> args) async {
   await build();
-  await package();
+  if (!args.contains("--no-crx")) {
+    await package();
+  }
 }
 
 build() async {
