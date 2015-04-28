@@ -18,8 +18,14 @@ build() async {
 
 package() async {
   var exe = findChromeExecutable();
+  var args = ["--pack-extension=${Directory.current.path}/build/web"];
 
-  var process = await Process.start(exe.path, ["--pack-extension=${Directory.current.path}/build/web"]);
+  if (globalKey.existsSync()) {
+    print("Signing with Global Key");
+    args.add("--pack-extension-key=${globalKey.path}");
+  }
+
+  var process = await Process.start(exe.path, args);
   stdout.addStream(process.stdout);
   stderr.addStream(process.stderr);
   var code = await process.exitCode;
@@ -39,8 +45,15 @@ package() async {
   var crxFile = new File("build/web.crx");
   crxFile.renameSync("${crxDir.path}/DSLink.crx");
   var crxKey = new File("build/web.pem");
-  crxKey.renameSync("${crxDir.path}/DSLink.pem");
+  if (crxKey.existsSync()) {
+    print("Copying Generate Key to Global Key");
+    globalKey.createSync(recursive: true);
+    globalKey.writeAsStringSync(crxKey.readAsStringSync());
+    crxKey.deleteSync();
+  }
 }
+
+File globalKey = new File("${Platform.environment["HOME"]}/.dglogik/crx.pem");
 
 File findChromeExecutable() {
   void executableNotFound() {
