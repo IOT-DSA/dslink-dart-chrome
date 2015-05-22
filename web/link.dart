@@ -1,8 +1,6 @@
 import "dart:async";
 
-import "package:dslink/browser_client.dart";
-import "package:dslink/responder.dart";
-import "package:dslink/src/crypto/pk.dart";
+import "package:dslink/browser.dart";
 
 import "package:chrome/chrome_ext.dart" as chrome;
 import "package:chrome/gen/tts.dart";
@@ -11,81 +9,102 @@ import "package:chrome/gen/tabs.dart";
 
 import "package:crypto/crypto.dart";
 
-BrowserECDHLink link;
-SimpleNodeProvider provider;
+LinkProvider link;
 
-main() async {
-  provider = new SimpleNodeProvider({
-    "Open_Tab": {
-      r"$is": "openTab",
-      r"$name": "Open Tab",
-      r"$invokable": "write",
-      r"$result": "values",
-      r"$params": [
-        {
-          "name": "url",
-          "type": "string"
-        },
-        {
-          "name": "active",
-          "type": "bool",
-          "default": true
-        }
-      ],
-      r"$columns": [
-        {
-          "name": "tab",
-          "type": "int"
-        }
-      ]
-    },
-    "Speak": {
-      r"$is": "speak",
-      r"$invokable": "write",
-      r"$result": "values",
-      r"$params": [
-        {
-          "name": "text",
-          "type": "string"
-        }
-      ],
-      r"$columns": []
-    },
-    "Idle_State": {
-      r"$name": "Idle State",
-      r"$type": "enum[active,idle,locked]",
-      "?value": "active"
-    },
-    "Most_Visited_Sites": {
-      r"$name": "Most Visited Sites",
-    }
-  }, {
-    "speak": (String path) => new SpeakNode(path),
-    "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path),
-    "openTab": (String path) => new OpenTabNode(path)
-  });
+class ChromeLocalStorageDataStore extends DataStorage {
+  static final ChromeLocalStorageDataStore INSTANCE = new ChromeLocalStorageDataStore();
 
-  var localStorage = chrome.storage.local;
-  var c = await localStorage.get({
-    "broker_url": "http://127.0.0.1:8080/conn",
-    "dsa_key": "__GENERATE__"
-  });
-  String brokerUrl = c["broker_url"];
-  PrivateKey key;
-
-  if (c["dsa_key"] != "__GENERATE__") {
-    key = new PrivateKey.loadFromString(c["dsa_key"]);
-  } else {
-    key = new PrivateKey.generate();
-    await localStorage.set({
-      "dsa_key": key.saveToString()
-    });
+  @override
+  Future<String> get(String key) async {
+    return (await chrome.storage.local.get(key))[key];
   }
 
+  @override
+  Future<bool> has(String key) async {
+    return (await chrome.storage.local.get())[key];
+  }
+
+  @override
+  Future<String> remove(String key) async {
+    var value = await get(key);
+    await chrome.storage.local.remove(key);
+    return value;
+  }
+
+  @override
+  Future store(String key, String value) async {
+    await chrome.storage.local.set({
+      key: value
+    });
+  }
+}
+
+main() async {
+  var brokerUrl = await ChromeLocalStorageDataStore.INSTANCE.get("broker_url");
+
+  if (brokerUrl == null) {
+    brokerUrl = "http://127.0.0.1:8080/conn";
+  }
+
+  link = new LinkProvider(
+      brokerUrl,
+      "Chrome-",
+      defaultNodes: {
+        "Open_Tab": {
+          r"$is": "openTab",
+          r"$name": "Open Tab",
+          r"$invokable": "write",
+          r"$result": "values",
+          r"$params": [
+            {
+              "name": "url",
+              "type": "string"
+            },
+            {
+              "name": "active",
+              "type": "bool",
+              "default": true
+            }
+          ],
+          r"$columns": [
+            {
+              "name": "tab",
+              "type": "int"
+            }
+          ]
+        },
+        "Speak": {
+          r"$is": "speak",
+          r"$invokable": "write",
+          r"$result": "values",
+          r"$params": [
+            {
+              "name": "text",
+              "type": "string"
+            }
+          ],
+          r"$columns": []
+        },
+        "Idle_State": {
+          r"$name": "Idle State",
+          r"$type": "enum[active,idle,locked]",
+          "?value": "active"
+        },
+        "Most_Visited_Sites": {
+          r"$name": "Most Visited Sites",
+        }
+      },
+      profiles: {
+        "speak": (String path) => new SpeakNode(path),
+        "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path),
+        "openTab": (String path) => new OpenTabNode(path)
+      }
+  );
+
+
+
   await setup();
-
-  link = new BrowserECDHLink(brokerUrl, "Chrome-", key, nodeProvider: provider);
-
+  await link.init();
   await link.connect();
 }
 
@@ -105,19 +124,22 @@ setup() async {
       datas.add("|".codeUnitAt(0));
     }
 
-    var s = CryptoUtils.bytesToHex((new SHA1()..add(datas)).close());
+    var s = CryptoUtils.bytesToHex((new SHA1()
+      ..add(datas)).close());
 
     if (lastMostVisitedSha == null || lastMostVisitedSha != s) {
-      var c = n("/Most_Visited_Sites");
+      var c = link["/Most_Visited_Sites"];
       lastMostVisitedSha = s;
       for (var x in c.children.keys) {
         c.removeChild(x);
       }
 
       for (var x in topSites) {
-        var id = CryptoUtils.bytesToHex((new SHA1()..add(x.url.codeUnits)..add(x.title.codeUnits)).close());
+        var id = CryptoUtils.bytesToHex((new SHA1()
+          ..add(x.url.codeUnits)
+          ..add(x.title.codeUnits)).close());
 
-        provider.addNode("/Most_Visited_Sites/${id}", {
+        link.addNode("/Most_Visited_Sites/${id}", {
           r"$name": x.title,
           "URL": {
             r"$type": "string",
@@ -141,14 +163,10 @@ setup() async {
   });
 
   chrome.idle.onStateChanged.listen((state) {
-    n("/Idle_State").updateValue(state);
+    link.updateValue("/Idle_State", state);
   });
 
-  n("/Idle_State").updateValue(await chrome.idle.queryState(300));
-}
-
-SimpleNode n(String path) {
-  return provider.getNode(path);
+  link.updateValue("/Idle_State", await chrome.idle.queryState(300));
 }
 
 class SpeakNode extends SimpleNode {
@@ -190,7 +208,7 @@ class OpenMostVisitedSiteNode extends SimpleNode {
   @override
   onInvoke(Map<String, dynamic> params) async {
     var p = path.split("/").take(3).join("/");
-    var url = (provider.getNode(p).getChild("URL") as SimpleNode).lastValueUpdate.value;
+    var url = link["${p}/URL"].lastValueUpdate.value;
     var tab = await chrome.tabs.create(new TabsCreateParams(url: url, active: true));
     return {
       "tab": tab.id
@@ -199,6 +217,6 @@ class OpenMostVisitedSiteNode extends SimpleNode {
 }
 
 TtsSpeakParams ttsOptions = new TtsSpeakParams(
-  enqueue: true,
-  lang: "en-US"
+    enqueue: true,
+    lang: "en-US"
 );
