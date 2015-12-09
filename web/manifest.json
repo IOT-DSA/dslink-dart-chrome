@@ -16,6 +16,8 @@
     "system.memory",
     "tts",
     "topSites",
-    "tabs"
+    "tabs",
+    "http://*/",
+    "https://*/"
   ]
 }

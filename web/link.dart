@@ -1,4 +1,6 @@
 import "dart:async";
+import "dart:convert";
+import "dart:js"
 
 import "package:dslink/browser.dart";
 
@@ -8,6 +10,7 @@ import "package:chrome/gen/top_sites.dart";
 import "package:chrome/gen/tabs.dart";
 
 import "package:crypto/crypto.dart";
+import "package:chrome/chrome_ext.dart";
 
 LinkProvider link;
 
@@ -40,6 +43,10 @@ class ChromeLocalStorageDataStore extends DataStorage {
 }
 
 main() async {
+  if (await ChromeLocalStorageDataStore.INSTANCE.has("log_level")) {
+    updateLogLevel(await ChromeLocalStorageDataStore.INSTANCE.get("log_level"));
+  }
+
   var brokerUrl = await ChromeLocalStorageDataStore.INSTANCE.get("broker_url");
 
   if (brokerUrl == null) {
@@ -47,59 +54,63 @@ main() async {
   }
 
   link = new LinkProvider(
-      brokerUrl,
-      "Chrome-",
-      defaultNodes: {
-        "openTab": {
-          r"$is": "openTab",
-          r"$name": "Open Tab",
-          r"$invokable": "write",
-          r"$result": "values",
-          r"$params": [
-            {
-              "name": "url",
-              "type": "string"
-            },
-            {
-              "name": "active",
-              "type": "bool",
-              "default": true
-            }
-          ],
-          r"$columns": [
-            {
-              "name": "tab",
-              "type": "int"
-            }
-          ]
-        },
-        "speak": {
-          r"$name": "Speak",
-          r"$is": "speak",
-          r"$invokable": "write",
-          r"$result": "values",
-          r"$params": [
-            {
-              "name": "text",
-              "type": "string"
-            }
-          ],
-          r"$columns": []
-        },
-        "idleState": {
-          r"$name": "Idle State",
-          r"$type": "enum[active,idle,locked]",
-          "?value": "active"
-        },
-        "mostVisitedSites": {
-          r"$name": "Most Visited Sites",
-        }
+    brokerUrl,
+    "Chrome-",
+    defaultNodes: {
+      "openTab": {
+        r"$is": "openTab",
+        r"$name": "Open Tab",
+        r"$invokable": "write",
+        r"$result": "values",
+        r"$params": [
+          {
+            "name": "url",
+            "type": "string"
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "default": true
+          }
+        ],
+        r"$columns": [
+          {
+            "name": "tab",
+            "type": "int"
+          }
+        ]
       },
-      profiles: {
-        "speak": (String path) => new SpeakNode(path),
-        "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path),
-        "openTab": (String path) => new OpenTabNode(path)
+      "speak": {
+        r"$name": "Speak",
+        r"$is": "speak",
+        r"$invokable": "write",
+        r"$result": "values",
+        r"$params": [
+          {
+            "name": "text",
+            "type": "string"
+          }
+        ],
+        r"$columns": []
+      },
+      "idleState": {
+        r"$name": "Idle State",
+        r"$type": "enum[active,idle,locked]",
+        "?value": "active"
+      },
+      "mostVisitedSites": {
+        r"$name": "Most Visited Sites",
+      },
+      "tabs": {
+        r"$name": "Tabs"
       }
+    },
+    profiles: {
+      "speak": (String path) => new SpeakNode(path),
+      "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path),
+      "openTab": (String path) => new OpenTabNode(path),
+      "eval": (String path) => new EvalNode(path)
+    }
   );
 
   await link.init();
@@ -135,8 +146,7 @@ setup() async {
 
       for (var x in topSites) {
         var id = CryptoUtils.bytesToHex((new SHA1()
-          ..add(x.url.codeUnits)
-          ..add(x.title.codeUnits)).close());
+          ..add(x.url.codeUnits)..add(x.title.codeUnits)).close());
 
         link.addNode("/mostVisitedSites/${id}", {
           r"$name": x.title,
@@ -167,6 +177,65 @@ setup() async {
     link.updateValue("/idleState", state);
   });
 
+  var addTab = (Tab tab) {
+    link.addNode("/tabs/${tab.id}", {
+      r"$name": tab.title,
+      "title": {
+        r"$name": "Title",
+        r"$type": "string",
+        "?value": tab.title
+      },
+      "url": {
+        r"$name": "URL",
+        r"$type": "string",
+        "?value": tab.url
+      },
+      "eval": {
+        r"$name": "Evaluate JavaScript",
+        r"$invokable": "write",
+        r"$is": "eval",
+        r"$params": [
+          {
+            "name": "code",
+            "type": "string",
+            "editor": "textarea"
+          }
+        ],
+        r"$columns": [
+          {
+            "name": "result",
+            "type": "string"
+          }
+        ]
+      }
+    });
+  };
+
+  chrome.tabs.onCreated.listen(addTab);
+  for (Window w in await chrome.windows.getAll()) {
+    List<Tab> tabs = await chrome.tabs.getAllInWindow(w.id);
+    tabs.forEach(addTab);
+  }
+
+  chrome.tabs.onUpdated.listen((OnUpdatedEvent e) {
+    SimpleNode node = link["/tabs/${e.tabId}"];
+    if (node == null) {
+      return;
+    }
+
+    if (node.configs[r"$name"] != e.tab.title) {
+      node.configs[r"$name"] = e.tab.title;
+      node.updateList(r"$name");
+    }
+
+    link.val("/tabs/${e.tabId}/title", e.tab.title);
+    link.val("/tabs/${e.tabId}/url", e.tab.url);
+  });
+
+  chrome.tabs.onRemoved.listen((TabsOnRemovedEvent e) {
+    link.removeNode("/tabs/${e.tabId}");
+  });
+
   link.updateValue("/idleState", await chrome.idle.queryState(300));
 }
 
@@ -195,10 +264,36 @@ class OpenTabNode extends SimpleNode {
     var url = params["url"];
     var active = params["active"];
 
-    Tab tab = await chrome.tabs.create(new TabsCreateParams(url: url, active: active));
+    Tab tab = await chrome.tabs.create(
+      new TabsCreateParams(url: url, active: active));
 
     return {
       "tab": tab.id
+    };
+  }
+}
+
+class EvalNode extends SimpleNode {
+  EvalNode(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var p = path.split("/").take(3);
+    int tabId = int.parse(p.last);
+    String code = params["code"];
+
+    if (code is! String) {
+      throw new Exception("Bad Code");
+    }
+
+    var details = new InjectDetails(code: code);
+    var results = await chrome.tabs.executeScript(details, tabId);
+    if (results is List && results.length == 1) {
+      results = results.first;
+    }
+
+    return {
+      "result": JSON.decode(context["JSON"].callMethod("stringify", [results]))
     };
   }
 }
@@ -210,7 +305,8 @@ class OpenMostVisitedSiteNode extends SimpleNode {
   onInvoke(Map<String, dynamic> params) async {
     var p = path.split("/").take(3).join("/");
     var url = link.val("${p}/url");
-    var tab = await chrome.tabs.create(new TabsCreateParams(url: url, active: true));
+    var tab = await chrome.tabs.create(
+      new TabsCreateParams(url: url, active: true));
     return {
       "tab": tab.id
     };
@@ -218,6 +314,6 @@ class OpenMostVisitedSiteNode extends SimpleNode {
 }
 
 TtsSpeakParams ttsOptions = new TtsSpeakParams(
-    enqueue: true,
-    lang: "en-US"
+  enqueue: true,
+  lang: "en-US"
 );
