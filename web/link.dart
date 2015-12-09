@@ -50,7 +50,7 @@ main() async {
       brokerUrl,
       "Chrome-",
       defaultNodes: {
-        "Open_Tab": {
+        "openTab": {
           r"$is": "openTab",
           r"$name": "Open Tab",
           r"$invokable": "write",
@@ -73,7 +73,8 @@ main() async {
             }
           ]
         },
-        "Speak": {
+        "speak": {
+          r"$name": "Speak",
           r"$is": "speak",
           r"$invokable": "write",
           r"$result": "values",
@@ -85,12 +86,12 @@ main() async {
           ],
           r"$columns": []
         },
-        "Idle_State": {
+        "idleState": {
           r"$name": "Idle State",
           r"$type": "enum[active,idle,locked]",
           "?value": "active"
         },
-        "Most_Visited_Sites": {
+        "mostVisitedSites": {
           r"$name": "Most Visited Sites",
         }
       },
@@ -101,8 +102,8 @@ main() async {
       }
   );
 
-  await setup();
   await link.init();
+  await setup();
   await link.connect();
 }
 
@@ -111,7 +112,7 @@ Timer timer;
 String lastMostVisitedSha;
 
 setup() async {
-  timer = new Timer.periodic(new Duration(seconds: 5), (_) async {
+  timer = new Timer.periodic(const Duration(seconds: 5), (_) async {
     List<MostVisitedURL> topSites = await chrome.topSites.get();
 
     var datas = [];
@@ -126,7 +127,7 @@ setup() async {
       ..add(datas)).close());
 
     if (lastMostVisitedSha == null || lastMostVisitedSha != s) {
-      var c = link["/Most_Visited_Sites"];
+      var c = link["/mostVisitedSites"];
       lastMostVisitedSha = s;
       for (var x in c.children.keys) {
         c.removeChild(x);
@@ -137,13 +138,15 @@ setup() async {
           ..add(x.url.codeUnits)
           ..add(x.title.codeUnits)).close());
 
-        link.addNode("/Most_Visited_Sites/${id}", {
+        link.addNode("/mostVisitedSites/${id}", {
           r"$name": x.title,
-          "URL": {
+          "url": {
+            r"$name": "URL",
             r"$type": "string",
             "?value": x.url
           },
-          "Open": {
+          "open": {
+            r"$name": "Open",
             r"$is": "openMostVisitedSite",
             r"$invokable": "write",
             r"$result": "values",
@@ -161,10 +164,10 @@ setup() async {
   });
 
   chrome.idle.onStateChanged.listen((state) {
-    link.updateValue("/Idle_State", state);
+    link.updateValue("/idleState", state);
   });
 
-  link.updateValue("/Idle_State", await chrome.idle.queryState(300));
+  link.updateValue("/idleState", await chrome.idle.queryState(300));
 }
 
 class SpeakNode extends SimpleNode {
@@ -206,7 +209,7 @@ class OpenMostVisitedSiteNode extends SimpleNode {
   @override
   onInvoke(Map<String, dynamic> params) async {
     var p = path.split("/").take(3).join("/");
-    var url = link["${p}/URL"].lastValueUpdate.value;
+    var url = link.val("${p}/url");
     var tab = await chrome.tabs.create(new TabsCreateParams(url: url, active: true));
     return {
       "tab": tab.id
