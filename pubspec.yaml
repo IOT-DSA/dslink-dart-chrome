@@ -2,7 +2,7 @@ name: dslink_chrome
 description: DSLink for Chrome
 dependencies:
   browser: any
-  chrome: "^0.7.0-dev1"
+  chrome: "^0.8.0"
   dslink:
     git: https://github.com/IOT-DSA/sdk-dslink-dart.git
   crypto: ">=0.9.0 <1.0.0"
@@ -10,3 +10,4 @@ transformers:
 - chrome
 - $dart2js:
     csp: true
+    minify: false

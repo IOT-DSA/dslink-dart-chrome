@@ -1,6 +1,9 @@
 import "dart:async";
 import "dart:convert";
 import "dart:js";
+import "dart:typed_data";
+
+import "dart:html" hide Document, Window;
 
 import "package:dslink/browser.dart";
 
@@ -8,9 +11,10 @@ import "package:chrome/chrome_ext.dart" as chrome;
 import "package:chrome/gen/tts.dart";
 import "package:chrome/gen/top_sites.dart";
 import "package:chrome/gen/tabs.dart";
+import "package:chrome/gen/tab_capture.dart";
 
 import "package:crypto/crypto.dart";
-import "package:chrome/chrome_ext.dart";
+import "package:chrome/chrome_ext.dart" hide LocalMediaStream;
 
 LinkProvider link;
 
@@ -109,7 +113,8 @@ main() async {
       "speak": (String path) => new SpeakNode(path),
       "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path),
       "openTab": (String path) => new OpenTabNode(path),
-      "eval": (String path) => new EvalNode(path)
+      "eval": (String path) => new EvalNode(path),
+      "readMediaStream": (String path) => new MediaCaptureNode(path)
     }
   );
 
@@ -174,7 +179,7 @@ setup() async {
   });
 
   chrome.idle.onStateChanged.listen((state) {
-    link.updateValue("/idleState", state);
+    link.updateValue("/idleState", state.toString());
   });
 
   var addTab = (Tab tab) {
@@ -207,6 +212,20 @@ setup() async {
             "type": "string"
           }
         ]
+      },
+      "readAudioStream": {
+        r"$name": "Read Audio Stream",
+        r"$invokable": "write",
+        r"$is": "readMediaStream",
+        r"$params": [
+        ],
+        r"$columns": [
+          {
+            "name": "data",
+            "type": "binary"
+          }
+        ],
+        r"$result": "stream"
       }
     });
   };
@@ -236,7 +255,8 @@ setup() async {
     link.removeNode("/tabs/${e.tabId}");
   });
 
-  link.updateValue("/idleState", await chrome.idle.queryState(300));
+  var state = await chrome.idle.queryState(300);
+  link.updateValue("/idleState", state.toString());
 }
 
 class SpeakNode extends SimpleNode {
@@ -311,6 +331,67 @@ class OpenMostVisitedSiteNode extends SimpleNode {
       "tab": tab.id
     };
   }
+}
+
+class MediaCaptureNode extends SimpleNode {
+  MediaCaptureNode(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    TabMediaCaptureStatus status;
+    var controller = new StreamController();
+    try {
+      var p = path.split("/").take(3);
+      int tabId = int.parse(p.last);
+      if (tabCaptures[tabId] is! TabMediaCaptureStatus) {
+        status = tabCaptures[tabId] = new TabMediaCaptureStatus();
+        var options = new CaptureOptions(audio: true);
+        var stream = await chrome.tabCapture.capture(options);
+        status.stream = stream.jsProxy;
+      } else {
+        status = tabCaptures[tabId];
+      }
+
+      controller.onCancel = () {
+        if (status != null) {
+          status.counter--;
+
+          if (status.counter <= 0) {
+            status.counter = 0;
+            status.stream.stop();
+            tabCaptures.remove(tabId);
+          }
+        }
+      };
+
+      status.counter++;
+
+      status.stream.onAddTrack.listen((MediaStreamTrackEvent e) {
+        MediaStreamTrack track = e.track;
+        var reader = new FileReader();
+        var blob = new Blob([track]);
+        reader.onLoadEnd.listen((ProgressEvent e) {
+          controller.add({
+            "data": (reader.result as Uint8List).buffer.asByteData()
+          });
+        });
+        reader.readAsArrayBuffer(blob);
+      });
+
+      return controller.stream;
+    } finally {
+      if (status != null) {
+        status.counter--;
+      }
+    }
+  }
+}
+
+Map<int, TabMediaCaptureStatus> tabCaptures = {};
+
+class TabMediaCaptureStatus {
+  int counter = 0;
+  MediaStream stream;
 }
 
 TtsSpeakParams ttsOptions = new TtsSpeakParams(

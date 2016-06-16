@@ -17,6 +17,8 @@
     "tts",
     "topSites",
     "tabs",
+    "tabCapture",
+    "activeTab",
     "http://*/",
     "https://*/"
   ]
