@@ -114,7 +114,8 @@ main() async {
       "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path),
       "openTab": (String path) => new OpenTabNode(path),
       "eval": (String path) => new EvalNode(path),
-      "readMediaStream": (String path) => new MediaCaptureNode(path)
+      "readMediaStream": (String path) => new MediaCaptureNode(path),
+      "takeScreenshot": (String path) => new TakeScreenshotNode(path)
     }
   );
 
@@ -215,7 +216,7 @@ setup() async {
       },
       "readAudioStream": {
         r"$name": "Read Audio Stream",
-        r"$invokable": "write",
+        r"$invokable": "read",
         r"$is": "readMediaStream",
         r"$params": [
         ],
@@ -226,6 +227,20 @@ setup() async {
           }
         ],
         r"$result": "stream"
+      },
+      "takeScreenshot": {
+        r"$name": "Take Screenshot",
+        r"$invokable": "read",
+        r"$is": "takeScreenshot",
+        r"$params": [
+        ],
+        r"$columns": [
+          {
+            "name": "data",
+            "type": "string"
+          }
+        ],
+        r"$result": "values"
       }
     });
   };
@@ -330,6 +345,20 @@ class OpenMostVisitedSiteNode extends SimpleNode {
     return {
       "tab": tab.id
     };
+  }
+}
+
+class TakeScreenshotNode extends SimpleNode {
+  TakeScreenshotNode(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var url = await chrome.tabs.captureVisibleTab();
+    return [
+      {
+        "data": url
+      }
+    ];
   }
 }
 
