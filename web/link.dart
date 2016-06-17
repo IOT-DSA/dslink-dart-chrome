@@ -165,7 +165,26 @@ main() async {
             "type": "string",
             "placeholder": "Pandas are awesome."
           }
+        ],
+        r"$result": "values",
+        r"$columns": [
+          {
+            "name": "notificationId",
+            "type": "string"
+          }
         ]
+      },
+      "cancelNotification": {
+        r"$name": "Cancel Notification",
+        r"$invokable": "write",
+        r"$params": [
+          {
+            "name": "notificationId",
+            "type": "string"
+          }
+        ],
+        r"$result": "values",
+        r"$is": "cancelNotification"
       },
       "idleState": {
         r"$name": "Idle State",
@@ -186,11 +205,12 @@ main() async {
       "eval": (String path) => new EvalNode(path),
       "readMediaStream": (String path) => new MediaCaptureNode(path),
       "takeScreenshot": (String path) => new TakeScreenshotNode(path),
-      "createNotification": (String path) => new CreateNotificationAction(path)
+      "createNotification": (String path) => new CreateNotificationAction(path),
+      "cancelNotification": (String path) => new CancelNotificationAction(path)
     }
   );
 
-  if (!chrome.wallpaper.available) {
+  if (chrome.wallpaper.available) {
     link.defaultNodes["setWallpaperUrl"] = {
       r"$name": "Set Wallpaper URL",
       r"$is": "setWallpaperUrl",
@@ -571,5 +591,18 @@ class CreateNotificationAction extends SimpleNode {
     return [
       [id]
     ];
+  }
+}
+
+class CancelNotificationAction extends SimpleNode {
+  CancelNotificationAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var id = params["notificationId"];
+
+    if (id is String) {
+      await chrome.notifications.clear(id);
+    }
   }
 }
