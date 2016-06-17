@@ -45,7 +45,7 @@ package() async {
   crxDir.createSync(recursive: true);
 
   var crxFile = new File("build/web.crx");
-  crxFile.renameSync("${crxDir.path}/DSLink.crx");
+  crxFile.renameSync("${crxDir.path}/DSA.crx");
   var crxKey = new File("build/web.pem");
   if (crxKey.existsSync()) {
     print("Copying Generate Key to Global Key");

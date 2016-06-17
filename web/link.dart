@@ -46,20 +46,63 @@ class ChromeLocalStorageDataStore extends DataStorage {
   }
 }
 
+List<Function> _dones = [];
+
+onDone(Function e) {
+  _dones.add(e);
+}
+
+done() {
+  while (_dones.isNotEmpty) {
+    _dones.removeAt(0)();
+  }
+}
+
 main() async {
+  onDone(chrome.extension.onRequest.listen((chrome.OnRequestEvent e) {
+    print("Received Request: ${e.request}");
+
+    if (e.request == "reload") {
+      try {
+        for (var x in tabCaptures.keys) {
+          tabCaptures[x].stream.stop();
+        }
+
+        done();
+      } catch (e) {}
+
+      link.close();
+      main();
+    }
+
+    if (e.sendResponse != null) {
+      e.sendResponse();
+    }
+  }).cancel);
+
   if (await ChromeLocalStorageDataStore.INSTANCE.has("log_level")) {
     updateLogLevel(await ChromeLocalStorageDataStore.INSTANCE.get("log_level"));
+  } else {
+    await ChromeLocalStorageDataStore.INSTANCE.store("log_level", "INFO");
   }
 
   var brokerUrl = await ChromeLocalStorageDataStore.INSTANCE.get("broker_url");
 
   if (brokerUrl == null) {
     brokerUrl = "http://127.0.0.1:8080/conn";
+    await ChromeLocalStorageDataStore.INSTANCE.store("broker_url", brokerUrl);
+  }
+
+  var linkName = await ChromeLocalStorageDataStore.INSTANCE.get("link_name");
+
+  if (linkName == null) {
+    linkName = "Chrome";
+    await ChromeLocalStorageDataStore.INSTANCE.store("link_name", "Chrome");
   }
 
   link = new LinkProvider(
     brokerUrl,
-    "Chrome-",
+    "${linkName}-",
     defaultNodes: {
       "openTab": {
         r"$is": "openTab",
@@ -97,6 +140,33 @@ main() async {
         ],
         r"$columns": []
       },
+      "createNotification": {
+        r"$name": "Create Notification",
+        r"$invokable": "write",
+        r"$is": "createNotification",
+        r"$params": [
+          {
+            "name": "title",
+            "type": "string",
+            "placeholder": "Hello World"
+          },
+          {
+            "name": "message",
+            "type": "string",
+            "placeholder": "How are you today?"
+          },
+          {
+            "name": "iconUrl",
+            "type": "string",
+            "placeholder": "http://pandas.are.awesome/panda.png"
+          },
+          {
+            "name": "contextMessage",
+            "type": "string",
+            "placeholder": "Pandas are awesome."
+          }
+        ]
+      },
       "idleState": {
         r"$name": "Idle State",
         r"$type": "enum[active,idle,locked]",
@@ -115,7 +185,8 @@ main() async {
       "openTab": (String path) => new OpenTabNode(path),
       "eval": (String path) => new EvalNode(path),
       "readMediaStream": (String path) => new MediaCaptureNode(path),
-      "takeScreenshot": (String path) => new TakeScreenshotNode(path)
+      "takeScreenshot": (String path) => new TakeScreenshotNode(path),
+      "createNotification": (String path) => new CreateNotificationAction(path)
     }
   );
 
@@ -179,9 +250,9 @@ setup() async {
     }
   });
 
-  chrome.idle.onStateChanged.listen((state) {
+  onDone(chrome.idle.onStateChanged.listen((state) {
     link.updateValue("/idleState", state.toString());
-  });
+  }).cancel);
 
   var addTab = (Tab tab) {
     link.addNode("/tabs/${tab.id}", {
@@ -245,13 +316,13 @@ setup() async {
     });
   };
 
-  chrome.tabs.onCreated.listen(addTab);
+  onDone(chrome.tabs.onCreated.listen(addTab).cancel);
   for (Window w in await chrome.windows.getAll()) {
     List<Tab> tabs = await chrome.tabs.getAllInWindow(w.id);
     tabs.forEach(addTab);
   }
 
-  chrome.tabs.onUpdated.listen((OnUpdatedEvent e) {
+  onDone(chrome.tabs.onUpdated.listen((OnUpdatedEvent e) {
     SimpleNode node = link["/tabs/${e.tabId}"];
     if (node == null) {
       return;
@@ -264,11 +335,11 @@ setup() async {
 
     link.val("/tabs/${e.tabId}/title", e.tab.title);
     link.val("/tabs/${e.tabId}/url", e.tab.url);
-  });
+  }).cancel);
 
-  chrome.tabs.onRemoved.listen((TabsOnRemovedEvent e) {
+  onDone(chrome.tabs.onRemoved.listen((TabsOnRemovedEvent e) {
     link.removeNode("/tabs/${e.tabId}");
-  });
+  }).cancel);
 
   var state = await chrome.idle.queryState(300);
   link.updateValue("/idleState", state.toString());
@@ -427,3 +498,47 @@ TtsSpeakParams ttsOptions = new TtsSpeakParams(
   enqueue: true,
   lang: "en-US"
 );
+
+class CreateNotificationAction extends SimpleNode {
+  CreateNotificationAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var iconUrl = params["iconUrl"];
+    var title = params["title"];
+    var msg = params["message"];
+    var contextMsg = params["contextMessage"];
+    var priority = params["priority"];
+    if (priority is! int) {
+      if (priority is num) {
+        priority = priority.toInt();
+      } else if (priority is String) {
+        priority = int.parse(priority);
+      } else {
+        priority = 0;
+      }
+    }
+
+    if (priority > 2) {
+      priority = 2;
+    }
+
+    if (priority < -2) {
+      priority = -2;
+    }
+
+    var opts = new NotificationOptions(
+      type: TemplateType.BASIC,
+      title: title,
+      message: msg,
+      contextMessage: contextMsg,
+      iconUrl: iconUrl,
+      priority: priority
+    );
+    var id = await chrome.notifications.create(opts);
+
+    return [
+      [id]
+    ];
+  }
+}

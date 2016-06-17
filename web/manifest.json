@@ -1,11 +1,16 @@
 {
-  "name": "DSLink",
+  "name": "DSA",
   "version": "1",
   "minimum_chrome_version": "40",
   "manifest_version": 2,
   "background": {
     "scripts": ["link.dart.js"],
     "persistent": true
+  },
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
   },
   "permissions": [
     "alarms",
@@ -20,6 +25,9 @@
     "tabCapture",
     "activeTab",
     "http://*/",
-    "https://*/"
-  ]
+    "https://*/",
+    "<all_urls>",
+    "notifications"
+  ],
+  "options_page": "options.html"
 }
