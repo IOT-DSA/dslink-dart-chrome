@@ -190,6 +190,26 @@ main() async {
     }
   );
 
+  if (!chrome.wallpaper.available) {
+    link.defaultNodes["setWallpaperUrl"] = {
+      r"$name": "Set Wallpaper URL",
+      r"$is": "setWallpaperUrl",
+      r"$invokable": "config",
+      r"$params": [
+        {
+          "name": "URL",
+          "type": "string"
+        },
+        {
+          "name": "Layout",
+          "type": "enum[Stretch,Center,Center Cropped]"
+        }
+      ],
+      r"$columns": []
+    };
+    link.profiles["setWallpaperUrl"] = (String path) => new SetWallpaperUrlNode(path);
+  }
+
   await link.init();
   await setup();
   await link.connect();
@@ -430,6 +450,17 @@ class TakeScreenshotNode extends SimpleNode {
         "data": url
       }
     ];
+  }
+}
+
+class SetWallpaperUrlNode extends SimpleNode {
+  SetWallpaperUrlNode(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    String layout = params["Layout"] as String;
+    chrome.wallpaper.setWallpaper(new WallpaperSetWallpaperParams(url: params["URL"], layout: new WallpaperLayout.fromProxy(new JsObject.jsify(layout))));
+    return [];
   }
 }
 
