@@ -174,6 +174,11 @@ main() async {
             "name": "contextMessage",
             "type": "string",
             "placeholder": "Pandas are awesome."
+          },
+          {
+            "name": "requireInteraction",
+            "type": "bool",
+            "value": false
           }
         ],
         r"$result": "values",
@@ -183,6 +188,45 @@ main() async {
             "type": "string"
           }
         ]
+      },
+      "updateNotification": {
+        r"$name": "Update Notification",
+        r"$invokable": "write",
+        r"$is": "updateNotification",
+        r"$params": [
+          {
+            "name": "notificationId",
+            "type": "string",
+            "placeholder": "123e4567-e89b-12d3-a456-426655440000"
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "placeholder": "Hello World"
+          },
+          {
+            "name": "message",
+            "type": "string",
+            "placeholder": "How are you today?"
+          },
+          {
+            "name": "iconUrl",
+            "type": "string",
+            "placeholder": "http://pandas.are.awesome/panda.png"
+          },
+          {
+            "name": "contextMessage",
+            "type": "string",
+            "placeholder": "Pandas are awesome."
+          },
+          {
+            "name": "requireInteraction",
+            "type": "bool",
+            "value": false
+          }
+        ],
+        r"$result": "values",
+        r"$columns": []
       },
       "cancelNotification": {
         r"$name": "Cancel Notification",
@@ -216,6 +260,7 @@ main() async {
       "readMediaStream": (String path) => new MediaCaptureNode(path),
       "takeScreenshot": (String path) => new TakeScreenshotNode(path),
       "createNotification": (String path) => new CreateNotificationAction(path),
+      "updateNotification": (String path) => new UpdateNotificationAction(path),
       "cancelNotification": (String path) => new CancelNotificationAction(path)
     }
   );
@@ -583,6 +628,12 @@ class CreateNotificationAction extends SimpleNode {
     var msg = params["message"];
     var contextMsg = params["contextMessage"];
     var priority = params["priority"];
+    var requireInteraction = params["requireInteraction"];
+
+    if (iconUrl == null || iconUrl == "") {
+      iconUrl = chrome.extension.getURL("icon128.png");
+    }
+
     if (priority is! int) {
       if (priority is num) {
         priority = priority.toInt();
@@ -609,7 +660,60 @@ class CreateNotificationAction extends SimpleNode {
       iconUrl: iconUrl,
       priority: priority
     );
+    opts.jsProxy["requireInteraction"] = requireInteraction;
     var id = await chrome.notifications.create(opts);
+
+    return [
+      [id]
+    ];
+  }
+}
+
+class UpdateNotificationAction extends SimpleNode {
+  UpdateNotificationAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var notificationId = params["notificationId"];
+    var iconUrl = params["iconUrl"];
+    var title = params["title"];
+    var msg = params["message"];
+    var contextMsg = params["contextMessage"];
+    var priority = params["priority"];
+    var requireInteraction = params["requireInteraction"];
+
+    if (iconUrl == null || iconUrl == "") {
+      iconUrl = chrome.extension.getURL("icon128.png");
+    }
+
+    if (priority is! int) {
+      if (priority is num) {
+        priority = priority.toInt();
+      } else if (priority is String) {
+        priority = int.parse(priority);
+      } else {
+        priority = 0;
+      }
+    }
+
+    if (priority > 2) {
+      priority = 2;
+    }
+
+    if (priority < -2) {
+      priority = -2;
+    }
+
+    var opts = new NotificationOptions(
+        type: TemplateType.BASIC,
+        title: title,
+        message: msg,
+        contextMessage: contextMsg,
+        iconUrl: iconUrl,
+        priority: priority
+    );
+    opts.jsProxy["requireInteraction"] = requireInteraction;
+    var id = await chrome.notifications.update(notificationId, opts);
 
     return [
       [id]
