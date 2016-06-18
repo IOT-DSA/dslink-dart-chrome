@@ -79,10 +79,6 @@ main() async {
     if (e.request == "reload") {
       reload();
     }
-
-    if (e.sendResponse != null) {
-      e.sendResponse();
-    }
   }).cancel);
 
   var store = await chrome.storage.sync.get();
