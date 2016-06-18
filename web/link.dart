@@ -373,7 +373,8 @@ main() async {
       "createWindow": (String path) => new CreateWindowAction(path),
       "closeTab": (String path) => new CloseTabAction(path),
       "updateNotification": (String path) => new UpdateNotificationAction(path),
-      "cancelNotification": (String path) => new CancelNotificationAction(path)
+      "cancelNotification": (String path) => new CancelNotificationAction(path),
+      "updateTab": (String path) => new UpdateTabAction(path)
     }
   );
 
@@ -596,6 +597,23 @@ setup() async {
         r"$params": [],
         r"$columns": [],
         r"$is": "closeTab"
+      },
+      "update": {
+        r"$name": "Update",
+        r"$invokable": "write",
+        r"$is": "updateTab",
+        r"$params": [
+          {
+            "name": "url",
+            "type": "string",
+            "default": tab.url
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "default": tab.active
+          }
+        ]
       }
     });
   };
@@ -690,6 +708,20 @@ setup() async {
     link.val("/tabs/${e.tabId}/active", e.tab.active);
     link.val("/tabs/${e.tabId}/faviconUrl", e.tab.favIconUrl);
     link.val("/tabs/${e.tabId}/status", e.tab.status);
+
+    SimpleNode updateNode = link["/tabs/${e.tabId}/update"];
+    updateNode.configs[r"$params"] = [
+      {
+        "name": "url",
+        "type": "string",
+        "default": e.tab.url
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "default": e.tab.active
+      }
+    ];
   }).cancel);
 
   onDone(chrome.tabs.onRemoved.listen((TabsOnRemovedEvent e) {
@@ -1018,12 +1050,12 @@ class UpdateNotificationAction extends SimpleNode {
     }
 
     var opts = new NotificationOptions(
-        type: TemplateType.BASIC,
-        title: title,
-        message: msg,
-        contextMessage: contextMsg,
-        iconUrl: iconUrl,
-        priority: priority
+      type: TemplateType.BASIC,
+      title: title,
+      message: msg,
+      contextMessage: contextMsg,
+      iconUrl: iconUrl,
+      priority: priority
     );
     opts.jsProxy["requireInteraction"] = requireInteraction;
     var id = await chrome.notifications.update(notificationId, opts);
@@ -1108,6 +1140,24 @@ class CreateWindowAction extends SimpleNode {
     return [
       [window.id]
     ];
+  }
+}
+
+class UpdateTabAction extends SimpleNode {
+  UpdateTabAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var id = num.parse(path.split("/")[2]).toInt();
+
+    String url = params["url"];
+    bool active = params["active"];
+
+    var m = new TabsUpdateParams(
+      url: url,
+      active: active
+    );
+    chrome.tabs.update(m, id);
   }
 }
 
