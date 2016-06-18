@@ -327,7 +327,8 @@ main() async {
       "cancelNotification": (String path) => new CancelNotificationAction(path),
       "cancelSpeech": (String path) => new CancelSpeechAction(path),
       "closeWindow": (String path) => new CloseWindowAction(path),
-      "createWindow": (String path) => new CreateWindowAction(path)
+      "createWindow": (String path) => new CreateWindowAction(path),
+      "closeTab": (String path) => new CloseTabAction(path)
     }
   );
 
@@ -543,6 +544,13 @@ setup() async {
           }
         ],
         r"$result": "values"
+      },
+      "close": {
+        r"$name": "Close",
+        r"$invokable": "write",
+        r"$params": [],
+        r"$columns": [],
+        r"$is": "closeTab"
       }
     });
   };
@@ -941,6 +949,16 @@ class CancelSpeechAction extends SimpleNode {
   @override
   onInvoke(Map<String, dynamic> params) async {
     chrome.tts.stop();
+  }
+}
+
+class CloseTabAction extends SimpleNode {
+  CloseTabAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var id = num.parse(path.split("/")[2]).toInt();
+    chrome.tabs.remove(id);
   }
 }
 
