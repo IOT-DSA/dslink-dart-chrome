@@ -115,29 +115,6 @@ main() async {
     brokerUrl,
     linkName,
     defaultNodes: {
-      "openTab": {
-        r"$is": "openTab",
-        r"$name": "Open Tab",
-        r"$invokable": "write",
-        r"$result": "values",
-        r"$params": [
-          {
-            "name": "url",
-            "type": "string"
-          },
-          {
-            "name": "active",
-            "type": "bool",
-            "default": true
-          }
-        ],
-        r"$columns": [
-          {
-            "name": "tab",
-            "type": "int"
-          }
-        ]
-      },
       "speak": {
         r"$name": "Speak",
         r"$is": "speak",
@@ -298,7 +275,34 @@ main() async {
         r"$name": "Most Visited Sites",
       },
       "tabs": {
-        r"$name": "Tabs"
+        r"$name": "Tabs",
+        "create": {
+          r"$is": "createTab",
+          r"$name": "Create",
+          r"$invokable": "write",
+          r"$result": "values",
+          r"$params": [
+            {
+              "name": "url",
+              "type": "string"
+            },
+            {
+              "name": "active",
+              "type": "bool",
+              "default": true
+            },
+            {
+              "name": "windowId",
+              "type": "number"
+            }
+          ],
+          r"$columns": [
+            {
+              "name": "tab",
+              "type": "int"
+            }
+          ]
+        }
       },
       "windows": {
         r"$name": "Windows",
@@ -363,7 +367,7 @@ main() async {
     profiles: {
       "speak": (String path) => new SpeakNode(path),
       "openMostVisitedSite": (String path) => new OpenMostVisitedSiteNode(path),
-      "openTab": (String path) => new OpenTabNode(path),
+      "createTab": (String path) => new CreateTabNode(path),
       "eval": (String path) => new EvalNode(path),
       "readMediaStream": (String path) => new MediaCaptureNode(path),
       "takeScreenshot": (String path) => new TakeScreenshotNode(path),
@@ -740,9 +744,12 @@ setup() async {
   int lastFocused = currentWindow.focused ? currentWindow.id : -1;
 
   onDone(chrome.windows.onFocusChanged.listen((int id) {
-    try {
+    var windowNode = link.getNode("/windows/${id}");
+
+    if (windowNode != null) {
       link.val("/windows/${lastFocused}/focused", false);
-    } catch (e) {}
+    }
+
     link.val("/windows/${id}/focused", true);
     lastFocused = id;
   }).cancel);
@@ -872,20 +879,22 @@ class SpeakNode extends SimpleNode {
   }
 }
 
-class OpenTabNode extends SimpleNode {
-  OpenTabNode(String path) : super(path);
+class CreateTabNode extends SimpleNode {
+  CreateTabNode(String path) : super(path);
 
   @override
   onInvoke(Map<String, dynamic> params) async {
-    if (params["url"] == null) return {};
+    if (params["url"] == null) return [];
 
     var url = params["url"];
     var active = params["active"];
+    var windowId = asInt(params["windowId"]);
 
     Tab tab = await chrome.tabs.create(
       new TabsCreateParams(
         url: url,
-        active: active
+        active: active,
+        windowId: windowId
       )
     );
 
