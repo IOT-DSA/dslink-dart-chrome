@@ -346,40 +346,6 @@ main() async {
               "type": "number"
             }
           ]
-        },
-        "update": {
-          r"$name": "Update",
-          r"$is": "updateWindow",
-          r"$invokable": "write",
-          r"$params": [
-            {
-              "name": "windowId",
-              "type": "number"
-            },
-            {
-              "name": "top",
-              "type": "number"
-            },
-            {
-              "name": "left",
-              "type": "number"
-            },
-            {
-              "name": "width",
-              "type": "number"
-            },
-            {
-              "name": "height",
-              "type": "number"
-            },
-            {
-              "name": "state",
-              "type": "enum[normal,minimized,maximized,fullscreen,docked]",
-              "default": "normal"
-            }
-          ],
-          r"$result": "values",
-          r"$columns": []
         }
       },
       "account": {
@@ -474,6 +440,35 @@ setup() async {
     link.val("/windows/${e.id}/height", e.height);
     link.val("/windows/${e.id}/top", e.top);
     link.val("/windows/${e.id}/left", e.left);
+
+    SimpleNode updateNode = link["/windows/${e.id}/update"];
+    updateNode.configs[r"$params"] = [
+      {
+        "name": "top",
+        "type": "number",
+        "default": e.top
+      },
+      {
+        "name": "left",
+        "type": "number",
+        "default": e.left
+      },
+      {
+        "name": "width",
+        "type": "number",
+        "default": e.width
+      },
+      {
+        "name": "height",
+        "type": "number",
+        "default": e.height
+      },
+      {
+        "name": "state",
+        "type": "enum[normal,minimized,maximized,fullscreen,docked]",
+        "default": e.state.value
+      }
+    ];
   };
 
   mostVisitedSitesTimer = Scheduler.safeEvery(const Duration(seconds: 10), () async {
@@ -694,6 +689,40 @@ setup() async {
         r"$name": "Close",
         r"$invokable": "write",
         r"$is": "closeWindow"
+      },
+      "update": {
+        r"$name": "Update",
+        r"$is": "updateWindow",
+        r"$invokable": "write",
+        r"$params": [
+          {
+            "name": "top",
+            "type": "number",
+            "default": window.top
+          },
+          {
+            "name": "left",
+            "type": "number",
+            "default": window.left
+          },
+          {
+            "name": "width",
+            "type": "number",
+            "default": window.width
+          },
+          {
+            "name": "height",
+            "type": "number",
+            "default": window.height
+          },
+          {
+            "name": "state",
+            "type": "enum[normal,minimized,maximized,fullscreen,docked]",
+            "default": window.state.value
+          }
+        ],
+        r"$result": "values",
+        r"$columns": []
       }
     });
   };
@@ -1201,7 +1230,8 @@ class UpdateWindowAction extends SimpleNode {
 
   @override
   onInvoke(Map<String, dynamic> params) async {
-    int windowId = params["windowId"];
+    var id = num.parse(path.split("/")[2]).toInt();
+
     int left = asInt(params["left"]);
     int top = asInt(params["top"]);
     int width = asInt(params["width"]);
@@ -1218,7 +1248,7 @@ class UpdateWindowAction extends SimpleNode {
         height: height,
         state: windowState
     );
-    var window = await chrome.windows.update(windowId, opts);
+    var window = await chrome.windows.update(id, opts);
 
     return [
       [window.id]
