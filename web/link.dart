@@ -166,7 +166,7 @@ main() async {
           },
           {
             "name": "gender",
-            "type": "enum[male,female]",
+            "type": "enum[female,male]",
             "default": "female"
           },
           {
@@ -187,7 +187,7 @@ main() async {
         ],
         r"$columns": [
           {
-            "name": "lastEvent",
+            "name": "ttsEvent",
             "type": "map"
           }
         ]
@@ -353,40 +353,6 @@ main() async {
               "type": "number"
             }
           ]
-        },
-        "update": {
-          r"$name": "Update",
-          r"$is": "updateWindow",
-          r"$invokable": "write",
-          r"$params": [
-            {
-              "name": "windowId",
-              "type": "number"
-            },
-            {
-              "name": "top",
-              "type": "number"
-            },
-            {
-              "name": "left",
-              "type": "number"
-            },
-            {
-              "name": "width",
-              "type": "number"
-            },
-            {
-              "name": "height",
-              "type": "number"
-            },
-            {
-              "name": "state",
-              "type": "enum[normal,minimized,maximized,fullscreen,docked]",
-              "default": "normal"
-            }
-          ],
-          r"$result": "values",
-          r"$columns": []
         }
       },
       "account": {
@@ -416,7 +382,8 @@ main() async {
       "closeTab": (String path) => new CloseTabAction(path),
       "updateNotification": (String path) => new UpdateNotificationAction(path),
       "cancelNotification": (String path) => new CancelNotificationAction(path),
-      "clearAllNotifications": (String path) => new ClearAllNotificationsAction(path)
+      "clearAllNotifications": (String path) => new ClearAllNotificationsAction(path),
+      "updateTab": (String path) => new UpdateTabAction(path)
     }
   );
 
@@ -481,6 +448,35 @@ setup() async {
     link.val("/windows/${e.id}/height", e.height);
     link.val("/windows/${e.id}/top", e.top);
     link.val("/windows/${e.id}/left", e.left);
+
+    SimpleNode updateNode = link["/windows/${e.id}/update"];
+    updateNode.configs[r"$params"] = [
+      {
+        "name": "top",
+        "type": "number",
+        "default": e.top
+      },
+      {
+        "name": "left",
+        "type": "number",
+        "default": e.left
+      },
+      {
+        "name": "width",
+        "type": "number",
+        "default": e.width
+      },
+      {
+        "name": "height",
+        "type": "number",
+        "default": e.height
+      },
+      {
+        "name": "state",
+        "type": "enum[normal,minimized,maximized,fullscreen,docked]",
+        "default": e.state.value
+      }
+    ];
   };
 
   mostVisitedSitesTimer = Scheduler.safeEvery(const Duration(seconds: 10), () async {
@@ -639,6 +635,23 @@ setup() async {
         r"$params": [],
         r"$columns": [],
         r"$is": "closeTab"
+      },
+      "update": {
+        r"$name": "Update",
+        r"$invokable": "write",
+        r"$is": "updateTab",
+        r"$params": [
+          {
+            "name": "url",
+            "type": "string",
+            "default": tab.url
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "default": tab.active
+          }
+        ]
       }
     });
   };
@@ -684,6 +697,40 @@ setup() async {
         r"$name": "Close",
         r"$invokable": "write",
         r"$is": "closeWindow"
+      },
+      "update": {
+        r"$name": "Update",
+        r"$is": "updateWindow",
+        r"$invokable": "write",
+        r"$params": [
+          {
+            "name": "top",
+            "type": "number",
+            "default": window.top
+          },
+          {
+            "name": "left",
+            "type": "number",
+            "default": window.left
+          },
+          {
+            "name": "width",
+            "type": "number",
+            "default": window.width
+          },
+          {
+            "name": "height",
+            "type": "number",
+            "default": window.height
+          },
+          {
+            "name": "state",
+            "type": "enum[normal,minimized,maximized,fullscreen,docked]",
+            "default": window.state.value
+          }
+        ],
+        r"$result": "values",
+        r"$columns": []
       }
     });
   };
@@ -733,6 +780,20 @@ setup() async {
     link.val("/tabs/${e.tabId}/active", e.tab.active);
     link.val("/tabs/${e.tabId}/faviconUrl", e.tab.favIconUrl);
     link.val("/tabs/${e.tabId}/status", e.tab.status);
+
+    SimpleNode updateNode = link["/tabs/${e.tabId}/update"];
+    updateNode.configs[r"$params"] = [
+      {
+        "name": "url",
+        "type": "string",
+        "default": e.tab.url
+      },
+      {
+        "name": "active",
+        "type": "bool",
+        "default": e.tab.active
+      }
+    ];
   }).cancel);
 
   onDone(chrome.tabs.onRemoved.listen((TabsOnRemovedEvent e) {
@@ -783,6 +844,10 @@ class SpeakNode extends SimpleNode {
     ttsParams.rate = rate;
 
     ttsParams.jsProxy["onEvent"] = (JsObject obj) {
+      if (controller == null) {
+        return;
+      }
+
       String type = obj["type"];
 
       var map = {
@@ -801,12 +866,11 @@ class SpeakNode extends SimpleNode {
 
       if (type == "end") {
         controller.close();
+        controller = null;
       }
     };
 
-    chrome.tts.speak(text, ttsParams).then((_) {
-      controller.close();
-    });
+    chrome.tts.speak(text, ttsParams);
 
     await for (Map m in controller.stream) {
       yield [
@@ -1061,12 +1125,12 @@ class UpdateNotificationAction extends SimpleNode {
     }
 
     var opts = new NotificationOptions(
-        type: TemplateType.BASIC,
-        title: title,
-        message: msg,
-        contextMessage: contextMsg,
-        iconUrl: iconUrl,
-        priority: priority
+      type: TemplateType.BASIC,
+      title: title,
+      message: msg,
+      contextMessage: contextMsg,
+      iconUrl: iconUrl,
+      priority: priority
     );
     opts.jsProxy["requireInteraction"] = requireInteraction;
     var id = await chrome.notifications.update(notificationId, opts);
@@ -1167,12 +1231,31 @@ class CreateWindowAction extends SimpleNode {
   }
 }
 
+class UpdateTabAction extends SimpleNode {
+  UpdateTabAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var id = num.parse(path.split("/")[2]).toInt();
+
+    String url = params["url"];
+    bool active = params["active"];
+
+    var m = new TabsUpdateParams(
+      url: url,
+      active: active
+    );
+    chrome.tabs.update(m, id);
+  }
+}
+
 class UpdateWindowAction extends SimpleNode {
   UpdateWindowAction(String path) : super(path);
 
   @override
   onInvoke(Map<String, dynamic> params) async {
-    int windowId = params["windowId"];
+    var id = num.parse(path.split("/")[2]).toInt();
+
     int left = asInt(params["left"]);
     int top = asInt(params["top"]);
     int width = asInt(params["width"]);
@@ -1189,7 +1272,7 @@ class UpdateWindowAction extends SimpleNode {
         height: height,
         state: windowState
     );
-    var window = await chrome.windows.update(windowId, opts);
+    var window = await chrome.windows.update(id, opts);
 
     return [
       [window.id]
