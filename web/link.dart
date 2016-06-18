@@ -753,7 +753,11 @@ setup() async {
 
   var currentWindow = await chrome.windows.getCurrent();
 
-  int lastFocused = currentWindow.focused ? currentWindow.id : -1;
+  int lastFocused = -1;
+
+  if (currentWindow != null && currentWindow.focused == true) {
+    lastFocused = currentWindow.id;
+  }
 
   onDone(chrome.windows.onFocusChanged.listen((int id) {
     var windowNode = link.getNode("/windows/${id}");
@@ -762,7 +766,12 @@ setup() async {
       link.val("/windows/${lastFocused}/focused", false);
     }
 
-    link.val("/windows/${id}/focused", true);
+    windowNode = link.getNode("/windows/${id}");
+
+    if (windowNode != null) {
+      link.val("${windowNode.path}/focused", true);
+    }
+
     lastFocused = id;
   }).cancel);
 
