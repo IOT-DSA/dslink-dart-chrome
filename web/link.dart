@@ -16,6 +16,7 @@ import "package:chrome/gen/tab_capture.dart";
 
 import "package:crypto/crypto.dart";
 import "package:chrome/chrome_ext.dart" hide LocalMediaStream;
+import 'dart:core';
 
 LinkProvider link;
 
@@ -289,6 +290,12 @@ main() async {
         r"$result": "values",
         r"$is": "cancelNotification"
       },
+      "clearAllNotifications": {
+        r"$name": "Clear All Notifications",
+        r"$invokable": "write",
+        r"$result": "values",
+        r"$is": "clearAllNotifications"
+      },
       "idleState": {
         r"$name": "Idle State",
         r"$type": "enum[active,idle,locked]",
@@ -408,7 +415,8 @@ main() async {
       "updateWindow": (String path) => new UpdateWindowAction(path),
       "closeTab": (String path) => new CloseTabAction(path),
       "updateNotification": (String path) => new UpdateNotificationAction(path),
-      "cancelNotification": (String path) => new CancelNotificationAction(path)
+      "cancelNotification": (String path) => new CancelNotificationAction(path),
+      "clearAllNotifications": (String path) => new ClearAllNotificationsAction(path)
     }
   );
 
@@ -1079,6 +1087,19 @@ class CancelNotificationAction extends SimpleNode {
     if (id is String) {
       await chrome.notifications.clear(id);
     }
+  }
+}
+
+class ClearAllNotificationsAction extends SimpleNode {
+  ClearAllNotificationsAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    JsObject notifications = await chrome.notifications.getAll();
+    List<String> ids = context["Object"].callMethod("keys", [notifications]);
+    ids.forEach((id) {
+      chrome.notifications.clear(id);
+    });
   }
 }
 
