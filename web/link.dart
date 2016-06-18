@@ -141,14 +141,54 @@ main() async {
         r"$name": "Speak",
         r"$is": "speak",
         r"$invokable": "write",
-        r"$result": "values",
+        r"$result": "stream",
         r"$params": [
           {
             "name": "text",
             "type": "string"
+          },
+          {
+            "name": "lang",
+            "type": "string",
+            "default": "en-US"
+          },
+          {
+            "name": "rate",
+            "type": "number",
+            "default": 1.0
+          },
+          {
+            "name": "pitch",
+            "type": "number",
+            "default": 1.0
+          },
+          {
+            "name": "gender",
+            "type": "enum[male,female]",
+            "default": "female"
+          },
+          {
+            "name": "volume",
+            "type": "number",
+            "default": 1.0
+          },
+          {
+            "name": "voiceName",
+            "type": "string",
+            "default": ""
+          },
+          {
+            "name": "enqueue",
+            "type": "bool",
+            "default": true
           }
         ],
-        r"$columns": []
+        r"$columns": [
+          {
+            "name": "lastEvent",
+            "type": "map"
+          }
+        ]
       },
       "createNotification": {
         r"$name": "Create Notification",
@@ -313,6 +353,8 @@ setup() async {
     }
   });
 
+  onDone(timer.cancel);
+
   onDone(chrome.idle.onStateChanged.listen((state) {
     link.updateValue("/idleState", state.toString());
   }).cancel);
@@ -412,14 +454,72 @@ class SpeakNode extends SimpleNode {
   SpeakNode(String path) : super(path);
 
   @override
-  Object onInvoke(Map<String, dynamic> params) {
-    if (params["text"] == null) {
-      return {};
+  Object onInvoke(Map<String, dynamic> params) async* {
+    String text = params["text"];
+    String voiceName = params["voiceName"];
+    bool enqueue = params["enqueue"];
+    String lang = params["lang"];
+    num volume = params["volume"];
+    num pitch = params["pitch"];
+    num rate = params["rate"];
+
+    if (enqueue == null) {
+      enqueue = true;
     }
 
-    chrome.tts.speak(params["text"], ttsOptions);
+    if (lang == null) {
+      lang = "en-US";
+    }
 
-    return {};
+    String gender = params["gender"];
+
+    if (text == null) {
+      return;
+    }
+
+    var controller = new StreamController();
+
+    var ttsParamsObject = new JsObject.jsify({});
+    var ttsParams = new TtsSpeakParams.fromProxy(ttsParamsObject);
+    ttsParams.enqueue = enqueue;
+    ttsParams.voiceName = voiceName;
+    ttsParams.lang = lang;
+    ttsParams.gender = gender;
+    ttsParams.volume = volume;
+    ttsParams.pitch = pitch;
+    ttsParams.rate = rate;
+
+    ttsParams.jsProxy["onEvent"] = (JsObject obj) {
+      String type = obj["type"];
+
+      var map = {
+        "type": type
+      };
+
+      if (obj["charIndex"] is num) {
+        map["charIndex"] = (obj["charIndex"] as num).toInt();
+      }
+
+      if (obj["errorMessage"] is String) {
+        map["errorMessage"] = obj["errorMessage"];
+      }
+
+      controller.add(map);
+
+      if (type == "end") {
+        controller.close();
+      }
+    };
+
+    chrome.tts.speak(text, ttsParams).then((_) {
+      controller.close();
+    });
+
+    await for (Map m in controller.stream) {
+      yield [
+        [m]
+      ];
+    }
   }
 }
 
@@ -434,11 +534,13 @@ class OpenTabNode extends SimpleNode {
     var active = params["active"];
 
     Tab tab = await chrome.tabs.create(
-      new TabsCreateParams(url: url, active: active));
+      new TabsCreateParams(
+        url: url,
+        active: active
+      )
+    );
 
-    return {
-      "tab": tab.id
-    };
+    return [[tab.id]];
   }
 }
 
@@ -462,7 +564,11 @@ class EvalNode extends SimpleNode {
     }
 
     return {
-      "result": JSON.decode(context["JSON"].callMethod("stringify", [results]))
+      "result": JSON.decode(
+        context["JSON"].callMethod("stringify", [
+          results
+        ])
+      )
     };
   }
 }
@@ -475,7 +581,11 @@ class OpenMostVisitedSiteNode extends SimpleNode {
     var p = path.split("/").take(3).join("/");
     var url = link.val("${p}/url");
     var tab = await chrome.tabs.create(
-      new TabsCreateParams(url: url, active: true));
+      new TabsCreateParams(
+        url: url,
+        active: true
+      )
+    );
     return {
       "tab": tab.id
     };
@@ -489,9 +599,7 @@ class TakeScreenshotNode extends SimpleNode {
   onInvoke(Map<String, dynamic> params) async {
     var url = await chrome.tabs.captureVisibleTab();
     return [
-      {
-        "data": url
-      }
+      [url]
     ];
   }
 }
@@ -502,7 +610,12 @@ class SetWallpaperUrlNode extends SimpleNode {
   @override
   onInvoke(Map<String, dynamic> params) async {
     String layout = params["Layout"] as String;
-    chrome.wallpaper.setWallpaper(new WallpaperSetWallpaperParams(url: params["URL"], layout: new WallpaperLayout.fromProxy(new JsObject.jsify(layout))));
+    chrome.wallpaper.setWallpaper(
+      new WallpaperSetWallpaperParams(
+        url: params["URL"],
+        layout: new WallpaperLayout.fromProxy(new JsObject.jsify(layout))
+      )
+    );
     return [];
   }
 }
@@ -567,11 +680,6 @@ class TabMediaCaptureStatus {
   int counter = 0;
   MediaStream stream;
 }
-
-TtsSpeakParams ttsOptions = new TtsSpeakParams(
-  enqueue: true,
-  lang: "en-US"
-);
 
 class CreateNotificationAction extends SimpleNode {
   CreateNotificationAction(String path) : super(path);
