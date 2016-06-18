@@ -6,6 +6,7 @@ import "dart:typed_data";
 import "dart:html" hide Document, Window;
 
 import "package:dslink/browser.dart";
+import "package:dslink/utils.dart";
 
 import "package:chrome/chrome_ext.dart" as chrome;
 import "package:chrome/gen/tts.dart";
@@ -255,6 +256,54 @@ main() async {
       "tabs": {
         r"$name": "Tabs"
       },
+      "windows": {
+        r"$name": "Windows",
+        "create": {
+          r"$name": "Create",
+          r"$is": "createWindow",
+          r"$invokable": "write",
+          r"$params": [
+            {
+              "name": "url",
+              "type": "string",
+              "placeholder": "https://www.google.com"
+            },
+            {
+              "name": "top",
+              "type": "number"
+            },
+            {
+              "name": "left",
+              "type": "number"
+            },
+            {
+              "name": "width",
+              "type": "number"
+            },
+            {
+              "name": "height",
+              "type": "number"
+            },
+            {
+              "name": "state",
+              "type": "enum[normal,minimized,maximized,fullscreen,docked]",
+              "default": "normal"
+            },
+            {
+              "name": "type",
+              "type": "enum[normal,popup,panel,detached_panel]",
+              "default": "normal"
+            }
+          ],
+          r"$result": "values",
+          r"$columns": [
+            {
+              "name": "windowId",
+              "type": "number"
+            }
+          ]
+        }
+      },
       "account": {
         r"$name": "Account",
         "id": {
@@ -276,7 +325,9 @@ main() async {
       "takeScreenshot": (String path) => new TakeScreenshotNode(path),
       "createNotification": (String path) => new CreateNotificationAction(path),
       "cancelNotification": (String path) => new CancelNotificationAction(path),
-      "cancelSpeech": (String path) => new CancelSpeechAction(path)
+      "cancelSpeech": (String path) => new CancelSpeechAction(path),
+      "closeWindow": (String path) => new CloseWindowAction(path),
+      "createWindow": (String path) => new CreateWindowAction(path)
     }
   );
 
@@ -328,12 +379,22 @@ reload() async {
   main();
 }
 
-Timer timer;
+Disposable mostVisitedSitesTimer;
+Disposable updateTimer;
 
 String lastMostVisitedSha;
 
 setup() async {
-  timer = new Timer.periodic(const Duration(seconds: 5), (_) async {
+  var updateWindow = (Window e) {
+    link.val("/windows/${e.id}/state", e.state.value);
+    link.val("/windows/${e.id}/type", e.type.value);
+    link.val("/windows/${e.id}/width", e.width);
+    link.val("/windows/${e.id}/height", e.height);
+    link.val("/windows/${e.id}/top", e.top);
+    link.val("/windows/${e.id}/left", e.left);
+  };
+
+  mostVisitedSitesTimer = Scheduler.safeEvery(const Duration(seconds: 10), () async {
     List<MostVisitedURL> topSites = await chrome.topSites.get();
 
     var datas = [];
@@ -361,7 +422,7 @@ setup() async {
         link.addNode("/mostVisitedSites/${id}", {
           r"$name": x.title,
           "url": {
-            r"$name": "URL",
+            r"$name": "Url",
             r"$type": "string",
             "?value": x.url
           },
@@ -383,7 +444,17 @@ setup() async {
     }
   });
 
-  onDone(timer.cancel);
+  updateTimer = Scheduler.safeEvery(const Duration(seconds: 1), () async {
+    var windows = await chrome.windows.getAll();
+    for (Window window in windows) {
+      if (link.getNode("/windows/${window.id}") != null) {
+        updateWindow(window);
+      }
+    }
+  });
+
+  onDone(mostVisitedSitesTimer.dispose);
+  onDone(updateTimer.dispose);
 
   onDone(chrome.idle.onStateChanged.listen((state) {
     link.updateValue("/idleState", state.toString());
@@ -392,15 +463,40 @@ setup() async {
   var addTab = (Tab tab) {
     link.addNode("/tabs/${tab.id}", {
       r"$name": tab.title,
+      "id": {
+        r"$name": "ID",
+        r"$type": "number",
+        "?value": tab.id
+      },
+      "active": {
+        r"$name": "Active",
+        r"$type": "bool",
+        "?value": tab.active
+      },
+      "status": {
+        r"$name": "Status",
+        r"$type": "string",
+        "?value": tab.status
+      },
+      "faviconUrl": {
+        r"$name": "Favicon Url",
+        r"$type": "string",
+        "?value": tab.favIconUrl
+      },
       "title": {
         r"$name": "Title",
         r"$type": "string",
         "?value": tab.title
       },
       "url": {
-        r"$name": "URL",
+        r"$name": "Url",
         r"$type": "string",
         "?value": tab.url
+      },
+      "windowId": {
+        r"$name": "Window ID",
+        r"$type": "number",
+        "?value": tab.windowId
       },
       "eval": {
         r"$name": "Evaluate JavaScript",
@@ -451,10 +547,76 @@ setup() async {
     });
   };
 
+  var addWindow = (Window window) {
+    link.addNode("/windows/${window.id}", {
+      "type": {
+        r"$name": "Type",
+        r"$type": "string",
+        "?value": window.type.value
+      },
+      "state": {
+        r"$name": "State",
+        r"$type": "string",
+        "?value": window.state.value
+      },
+      "focused": {
+        r"$name": "Focused",
+        r"$type": "bool",
+        "?value": window.focused
+      },
+      "left": {
+        r"$name": "Left",
+        r"$type": "number",
+        "?value": window.left
+      },
+      "top": {
+        r"$name": "Top",
+        r"$type": "number",
+        "?value": window.top
+      },
+      "width": {
+        r"$name": "Width",
+        r"$type": "number",
+        "?value": window.width
+      },
+      "height": {
+        r"$name": "Height",
+        r"$type": "number",
+        "?value": window.height
+      },
+      "close": {
+        r"$name": "Close",
+        r"$invokable": "write",
+        r"$is": "closeWindow"
+      }
+    });
+  };
+
+  onDone(chrome.windows.onCreated.listen((Window w) {
+    addWindow(w);
+  }).cancel);
+
+  onDone(chrome.windows.onRemoved.listen((int id) {
+    link.removeNode("/windows/${id}");
+  }).cancel);
+
+  var currentWindow = await chrome.windows.getCurrent();
+
+  int lastFocused = currentWindow.focused ? currentWindow.id : -1;
+
+  onDone(chrome.windows.onFocusChanged.listen((int id) {
+    try {
+      link.val("/windows/${lastFocused}/focused", false);
+    } catch (e) {}
+    link.val("/windows/${id}/focused", true);
+    lastFocused = id;
+  }).cancel);
+
   onDone(chrome.tabs.onCreated.listen(addTab).cancel);
   for (Window w in await chrome.windows.getAll()) {
     List<Tab> tabs = await chrome.tabs.getAllInWindow(w.id);
     tabs.forEach(addTab);
+    addWindow(w);
   }
 
   onDone(chrome.tabs.onUpdated.listen((OnUpdatedEvent e) {
@@ -470,6 +632,11 @@ setup() async {
 
     link.val("/tabs/${e.tabId}/title", e.tab.title);
     link.val("/tabs/${e.tabId}/url", e.tab.url);
+    link.val("/tabs/${e.tabId}/id", e.tab.id);
+    link.val("/tabs/${e.tabId}/windowId", e.tab.windowId);
+    link.val("/tabs/${e.tabId}/active", e.tab.active);
+    link.val("/tabs/${e.tabId}/faviconUrl", e.tab.favIconUrl);
+    link.val("/tabs/${e.tabId}/status", e.tab.status);
   }).cancel);
 
   onDone(chrome.tabs.onRemoved.listen((TabsOnRemovedEvent e) {
@@ -642,7 +809,7 @@ class SetWallpaperUrlNode extends SimpleNode {
     String layout = params["Layout"] as String;
     chrome.wallpaper.setWallpaper(
       new WallpaperSetWallpaperParams(
-        url: params["URL"],
+        url: params["Url"],
         layout: new WallpaperLayout.fromProxy(new JsObject.jsify(layout))
       )
     );
@@ -774,5 +941,66 @@ class CancelSpeechAction extends SimpleNode {
   @override
   onInvoke(Map<String, dynamic> params) async {
     chrome.tts.stop();
+  }
+}
+
+class CloseWindowAction extends SimpleNode {
+  CloseWindowAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var id = num.parse(path.split("/")[2]).toInt();
+    chrome.windows.remove(id);
+  }
+}
+
+class CreateWindowAction extends SimpleNode {
+  CreateWindowAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    String url = params["url"];
+    int left = asInt(params["left"]);
+    int top = asInt(params["top"]);
+    int width = asInt(params["width"]);
+    int height = asInt(params["height"]);
+    CreateType type = CreateType.VALUES.firstWhere((x) {
+      return x.value.toLowerCase() == params["type"].toString().toLowerCase();
+    }, orElse: () => CreateType.NORMAL);
+
+    WindowState windowState = WindowState.VALUES.firstWhere((x) {
+      return x.value.toLowerCase() == params["state"].toString().toLowerCase();
+    }, orElse: () => WindowState.NORMAL);
+
+    var opts = new WindowsCreateParams(
+      url: url,
+      left: left,
+      top: top,
+      width: width,
+      height: height,
+      type: type,
+      state: windowState
+    );
+    var window = await chrome.windows.create(opts);
+
+    return [
+      [window.id]
+    ];
+  }
+}
+
+int asInt(m) {
+  if (m is int) {
+    return m;
+  } else if (m is num) {
+    return m.toInt();
+  } else if (m is String) {
+    var c = num.parse(m, (e) => null);
+    if (c != null) {
+      return c.toInt();
+    }
+    return null;
+  } else {
+    return null;
   }
 }
