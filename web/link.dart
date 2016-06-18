@@ -190,6 +190,14 @@ main() async {
           }
         ]
       },
+      "cancelSpeech": {
+        r"$name": "Cancel Speech",
+        r"$invokable": "write",
+        r"$result": "values",
+        r"$is": "cancelSpeech",
+        r"$columns": [],
+        r"$params": []
+      },
       "createNotification": {
         r"$name": "Create Notification",
         r"$invokable": "write",
@@ -246,6 +254,17 @@ main() async {
       },
       "tabs": {
         r"$name": "Tabs"
+      },
+      "account": {
+        r"$name": "Account",
+        "id": {
+          r"$name": "ID",
+          r"$type": "string"
+        },
+        "email": {
+          r"$name": "Email",
+          r"$type": "string"
+        }
       }
     },
     profiles: {
@@ -256,18 +275,19 @@ main() async {
       "readMediaStream": (String path) => new MediaCaptureNode(path),
       "takeScreenshot": (String path) => new TakeScreenshotNode(path),
       "createNotification": (String path) => new CreateNotificationAction(path),
-      "cancelNotification": (String path) => new CancelNotificationAction(path)
+      "cancelNotification": (String path) => new CancelNotificationAction(path),
+      "cancelSpeech": (String path) => new CancelSpeechAction(path)
     }
   );
 
   if (chrome.wallpaper.available) {
     link.defaultNodes["setWallpaperUrl"] = {
-      r"$name": "Set Wallpaper URL",
+      r"$name": "Set Wallpaper Url",
       r"$is": "setWallpaperUrl",
       r"$invokable": "config",
       r"$params": [
         {
-          "name": "URL",
+          "name": "Url",
           "type": "string"
         },
         {
@@ -283,6 +303,16 @@ main() async {
   await link.init();
   await setup();
   await link.connect();
+
+  var profile = await chrome.identity.getProfileUserInfo();
+  link.val("/account/email", profile.email);
+  link.val("/account/id", profile.id);
+
+  onDone(chrome.identity.onSignInChanged.listen((e) async {
+    var profile = await chrome.identity.getProfileUserInfo();
+    link.val("/account/email", profile.email);
+    link.val("/account/id", profile.id);
+  }).cancel);
 }
 
 reload() async {
@@ -735,5 +765,14 @@ class CancelNotificationAction extends SimpleNode {
     if (id is String) {
       await chrome.notifications.clear(id);
     }
+  }
+}
+
+class CancelSpeechAction extends SimpleNode {
+  CancelSpeechAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    chrome.tts.stop();
   }
 }

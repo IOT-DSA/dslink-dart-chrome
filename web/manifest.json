@@ -16,6 +16,7 @@
     "alarms",
     "idle",
     "identity",
+    "identity.email",
     "storage",
     "system.cpu",
     "system.memory",
