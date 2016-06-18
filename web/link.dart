@@ -346,6 +346,40 @@ main() async {
               "type": "number"
             }
           ]
+        },
+        "update": {
+          r"$name": "Update",
+          r"$is": "updateWindow",
+          r"$invokable": "write",
+          r"$params": [
+            {
+              "name": "windowId",
+              "type": "number"
+            },
+            {
+              "name": "top",
+              "type": "number"
+            },
+            {
+              "name": "left",
+              "type": "number"
+            },
+            {
+              "name": "width",
+              "type": "number"
+            },
+            {
+              "name": "height",
+              "type": "number"
+            },
+            {
+              "name": "state",
+              "type": "enum[normal,minimized,maximized,fullscreen,docked]",
+              "default": "normal"
+            }
+          ],
+          r"$result": "values",
+          r"$columns": []
         }
       },
       "account": {
@@ -371,6 +405,7 @@ main() async {
       "cancelSpeech": (String path) => new CancelSpeechAction(path),
       "closeWindow": (String path) => new CloseWindowAction(path),
       "createWindow": (String path) => new CreateWindowAction(path),
+      "updateWindow": (String path) => new UpdateWindowAction(path),
       "closeTab": (String path) => new CloseTabAction(path),
       "updateNotification": (String path) => new UpdateNotificationAction(path),
       "cancelNotification": (String path) => new CancelNotificationAction(path),
@@ -1158,6 +1193,36 @@ class UpdateTabAction extends SimpleNode {
       active: active
     );
     chrome.tabs.update(m, id);
+  }
+}
+
+class UpdateWindowAction extends SimpleNode {
+  UpdateWindowAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    int windowId = params["windowId"];
+    int left = asInt(params["left"]);
+    int top = asInt(params["top"]);
+    int width = asInt(params["width"]);
+    int height = asInt(params["height"]);
+
+    WindowState windowState = WindowState.VALUES.firstWhere((x) {
+      return x.value.toLowerCase() == params["state"].toString().toLowerCase();
+    }, orElse: () => WindowState.NORMAL);
+
+    var opts = new WindowsUpdateParams(
+        left: left,
+        top: top,
+        width: width,
+        height: height,
+        state: windowState
+    );
+    var window = await chrome.windows.update(windowId, opts);
+
+    return [
+      [window.id]
+    ];
   }
 }
 
