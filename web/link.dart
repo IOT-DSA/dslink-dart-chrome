@@ -165,7 +165,7 @@ main() async {
           },
           {
             "name": "gender",
-            "type": "enum[male,female]",
+            "type": "enum[female,male]",
             "default": "female"
           },
           {
@@ -186,7 +186,7 @@ main() async {
         ],
         r"$columns": [
           {
-            "name": "lastEvent",
+            "name": "ttsEvent",
             "type": "map"
           }
         ]
@@ -836,6 +836,10 @@ class SpeakNode extends SimpleNode {
     ttsParams.rate = rate;
 
     ttsParams.jsProxy["onEvent"] = (JsObject obj) {
+      if (controller == null) {
+        return;
+      }
+
       String type = obj["type"];
 
       var map = {
@@ -854,12 +858,11 @@ class SpeakNode extends SimpleNode {
 
       if (type == "end") {
         controller.close();
+        controller = null;
       }
     };
 
-    chrome.tts.speak(text, ttsParams).then((_) {
-      controller.close();
-    });
+    chrome.tts.speak(text, ttsParams);
 
     await for (Map m in controller.stream) {
       yield [
