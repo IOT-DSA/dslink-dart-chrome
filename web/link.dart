@@ -4,6 +4,7 @@ import "dart:js";
 import "dart:typed_data";
 
 import "dart:html" hide Document, Window;
+import "dart:html" as HTML;
 
 import "package:dslink/browser.dart";
 import "package:dslink/utils.dart";
@@ -16,35 +17,46 @@ import "package:chrome/gen/tab_capture.dart";
 
 import "package:crypto/crypto.dart";
 import "package:chrome/chrome_ext.dart" hide LocalMediaStream;
-import 'dart:core';
 
 LinkProvider link;
 
-class ChromeLocalStorageDataStore extends DataStorage {
-  static final ChromeLocalStorageDataStore INSTANCE = new ChromeLocalStorageDataStore();
+class ChromeDataStore extends DataStorage {
+  static const List<String> LOCAL_ONLY = const [
+    "dsa_nodes"
+  ];
+
+  static final ChromeDataStore INSTANCE = new ChromeDataStore();
 
   @override
   Future<String> get(String key) async {
-    return (await chrome.storage.sync.get(key))[key];
+    return (await _getStorageForKey(key).get(key))[key];
   }
 
   @override
   Future<bool> has(String key) async {
-    return (await chrome.storage.sync.get())[key];
+    return (await _getStorageForKey(key).get()).containsKey(key);
   }
 
   @override
   Future<String> remove(String key) async {
     var value = await get(key);
-    await chrome.storage.sync.remove(key);
+    await _getStorageForKey(key).remove(key);
     return value;
   }
 
   @override
   Future store(String key, String value) async {
-    await chrome.storage.sync.set({
+    await _getStorageForKey(key).set({
       key: value
     });
+  }
+
+  StorageArea _getStorageForKey(String key) {
+    if (key.startsWith("dsa_key") || LOCAL_ONLY.contains(key)) {
+      return chrome.storage.local;
+    } else {
+      return chrome.storage.sync;
+    }
   }
 }
 
@@ -81,28 +93,30 @@ main() async {
     }
   }).cancel);
 
-  var store = await chrome.storage.sync.get();
-  var replace = {};
+  {
+    var store = await chrome.storage.sync.get();
+    var replace = {};
 
-  if (store["broker_url"] is! String) {
-    replace["broker_url"] = "http://127.0.0.1:8080/conn";
+    if (store["broker_url"] is! String) {
+      replace["broker_url"] = "http://127.0.0.1:8080/conn";
+    }
+
+    if (store["log_level"] is! String) {
+      replace["log_level"] = "INFO";
+    }
+
+    if (store["link_name"] is! String) {
+      replace["link_name"] = "Chrome";
+    }
+
+    if (replace.isNotEmpty) {
+      await chrome.storage.sync.set(replace);
+    }
   }
 
-  if (store["log_level"] is! String) {
-    replace["log_level"] = "INFO";
-  }
-
-  if (store["link_name"] is! String) {
-    replace["link_name"] = "Chrome";
-  }
-
-  if (replace.isNotEmpty) {
-    await chrome.storage.sync.set(replace);
-  }
-
-  updateLogLevel(await ChromeLocalStorageDataStore.INSTANCE.get("log_level"));
-  var brokerUrl = await ChromeLocalStorageDataStore.INSTANCE.get("broker_url");
-  var linkName = await ChromeLocalStorageDataStore.INSTANCE.get("link_name");
+  updateLogLevel(await ChromeDataStore.INSTANCE.get("log_level"));
+  var brokerUrl = await ChromeDataStore.INSTANCE.get("broker_url");
+  var linkName = await ChromeDataStore.INSTANCE.get("link_name");
 
   if (!linkName.endsWith("-")) {
     linkName += "-";
@@ -112,6 +126,20 @@ main() async {
     brokerUrl,
     linkName,
     defaultNodes: {
+      "readDesktopStream": {
+        r"$name": "Read Desktop Stream",
+        r"$invokable": "read",
+        r"$is": "readDesktopStream",
+        r"$params": [
+        ],
+        r"$columns": [
+          {
+            "name": "data",
+            "type": "binary"
+          }
+        ],
+        r"$result": "stream"
+      },
       "speak": {
         r"$name": "Speak",
         r"$is": "speak",
@@ -378,6 +406,7 @@ main() async {
       "createTab": (String path) => new CreateTabNode(path),
       "eval": (String path) => new EvalNode(path),
       "readMediaStream": (String path) => new MediaCaptureNode(path),
+      "readDesktopStream": (String path) => new DesktopCaptureAction(path),
       "takeScreenshot": (String path) => new TakeScreenshotNode(path),
       "createNotification": (String path) => new CreateNotificationAction(path),
       "cancelSpeech": (String path) => new CancelSpeechAction(path),
@@ -389,7 +418,8 @@ main() async {
       "cancelNotification": (String path) => new CancelNotificationAction(path),
       "clearAllNotifications": (String path) => new ClearAllNotificationsAction(path),
       "updateTab": (String path) => new UpdateTabAction(path)
-    }
+    },
+    dataStore: ChromeDataStore.INSTANCE
   );
 
   if (chrome.wallpaper.available) {
@@ -417,13 +447,18 @@ main() async {
   await link.connect();
 
   var profile = await chrome.identity.getProfileUserInfo();
-  link.val("/account/email", profile.email);
-  link.val("/account/id", profile.id);
+  if (profile != null) {
+    uv("/account/email", profile.email);
+    uv("/account/id", profile.id);
+  }
 
   onDone(chrome.identity.onSignInChanged.listen((e) async {
     var profile = await chrome.identity.getProfileUserInfo();
-    link.val("/account/email", profile.email);
-    link.val("/account/id", profile.id);
+
+    if (profile != null) {
+      uv("/account/email", profile.email);
+      uv("/account/id", profile.id);
+    }
   }).cancel);
 }
 
@@ -447,12 +482,14 @@ String lastMostVisitedSha;
 
 setup() async {
   var updateWindow = (Window e) {
-    link.val("/windows/${e.id}/state", e.state.value);
-    link.val("/windows/${e.id}/type", e.type.value);
-    link.val("/windows/${e.id}/width", e.width);
-    link.val("/windows/${e.id}/height", e.height);
-    link.val("/windows/${e.id}/top", e.top);
-    link.val("/windows/${e.id}/left", e.left);
+    if (e == null) return;
+
+    uv("/windows/${e.id}/state", e.state.value);
+    uv("/windows/${e.id}/type", e.type.value);
+    uv("/windows/${e.id}/width", e.width);
+    uv("/windows/${e.id}/height", e.height);
+    uv("/windows/${e.id}/top", e.top);
+    uv("/windows/${e.id}/left", e.left);
 
     SimpleNode updateNode = link["/windows/${e.id}/update"];
     updateNode.configs[r"$params"] = [
@@ -543,7 +580,10 @@ setup() async {
     }
 
     var currentTab = await chrome.tabs.getCurrent();
-    link.val("/activeTab", currentTab.id);
+
+    if (currentTab != null) {
+      uv("/activeTab", currentTab.id);
+    }
   });
 
   onDone(mostVisitedSitesTimer.dispose);
@@ -554,6 +594,8 @@ setup() async {
   }).cancel);
 
   var addTab = (Tab tab) {
+    if (tab == null) return;
+
     link.addNode("/tabs/${tab.id}", {
       r"$name": tab.title,
       "id": {
@@ -609,8 +651,8 @@ setup() async {
           }
         ]
       },
-      "readAudioStream": {
-        r"$name": "Read Audio Stream",
+      "readMediaStream": {
+        r"$name": "Read Media Stream",
         r"$invokable": "read",
         r"$is": "readMediaStream",
         r"$params": [
@@ -665,6 +707,8 @@ setup() async {
   };
 
   var addWindow = (Window window) {
+    if (window == null) return;
+
     link.addNode("/windows/${window.id}", {
       "type": {
         r"$name": "Type",
@@ -755,21 +799,23 @@ setup() async {
 
   int lastFocused = -1;
 
-  if (currentWindow != null && currentWindow.focused == true) {
-    lastFocused = currentWindow.id;
+  if (currentWindow != null) {
+    if (currentWindow != null && currentWindow.focused == true) {
+      lastFocused = currentWindow.id;
+    }
   }
 
   onDone(chrome.windows.onFocusChanged.listen((int id) {
     var windowNode = link.getNode("/windows/${id}");
 
     if (windowNode != null) {
-      link.val("/windows/${lastFocused}/focused", false);
+      uv("/windows/${lastFocused}/focused", false);
     }
 
     windowNode = link.getNode("/windows/${id}");
 
     if (windowNode != null) {
-      link.val("${windowNode.path}/focused", true);
+      uv("${windowNode.path}/focused", true);
     }
 
     lastFocused = id;
@@ -777,9 +823,11 @@ setup() async {
 
   onDone(chrome.tabs.onCreated.listen(addTab).cancel);
   for (Window w in await chrome.windows.getAll()) {
-    List<Tab> tabs = await chrome.tabs.getAllInWindow(w.id);
-    tabs.forEach(addTab);
-    addWindow(w);
+    if (w != null) {
+      List<Tab> tabs = await chrome.tabs.getAllInWindow(w.id);
+      tabs.forEach(addTab);
+      addWindow(w);
+    }
   }
 
   onDone(chrome.tabs.onUpdated.listen((OnUpdatedEvent e) {
@@ -793,13 +841,13 @@ setup() async {
       node.updateList(r"$name");
     }
 
-    link.val("/tabs/${e.tabId}/title", e.tab.title);
-    link.val("/tabs/${e.tabId}/url", e.tab.url);
-    link.val("/tabs/${e.tabId}/id", e.tab.id);
-    link.val("/tabs/${e.tabId}/windowId", e.tab.windowId);
-    link.val("/tabs/${e.tabId}/active", e.tab.active);
-    link.val("/tabs/${e.tabId}/faviconUrl", e.tab.favIconUrl);
-    link.val("/tabs/${e.tabId}/status", e.tab.status);
+    uv("/tabs/${e.tabId}/title", e.tab.title);
+    uv("/tabs/${e.tabId}/url", e.tab.url);
+    uv("/tabs/${e.tabId}/id", e.tab.id);
+    uv("/tabs/${e.tabId}/windowId", e.tab.windowId);
+    uv("/tabs/${e.tabId}/active", e.tab.active);
+    uv("/tabs/${e.tabId}/faviconUrl", e.tab.favIconUrl);
+    uv("/tabs/${e.tabId}/status", e.tab.status);
 
     SimpleNode updateNode = link["/tabs/${e.tabId}/update"];
     updateNode.configs[r"$params"] = [
@@ -822,6 +870,13 @@ setup() async {
 
   var state = await chrome.idle.queryState(300);
   link.updateValue("/idleState", state.toString());
+}
+
+void uv(String path, dynamic val) {
+  var node = link.getNode(path);
+  if (node != null) {
+    node.updateValue(val);
+  }
 }
 
 class SpeakNode extends SimpleNode {
@@ -965,9 +1020,7 @@ class OpenMostVisitedSiteNode extends SimpleNode {
         active: true
       )
     );
-    return {
-      "tab": tab.id
-    };
+    return [[tab.id]];
   }
 }
 
@@ -1011,7 +1064,7 @@ class MediaCaptureNode extends SimpleNode {
       int tabId = int.parse(p.last);
       if (tabCaptures[tabId] is! TabMediaCaptureStatus) {
         status = tabCaptures[tabId] = new TabMediaCaptureStatus();
-        var options = new CaptureOptions(audio: true);
+        var options = new CaptureOptions(video: true);
         var stream = await chrome.tabCapture.capture(options);
         status.stream = stream.jsProxy;
       } else {
@@ -1037,9 +1090,10 @@ class MediaCaptureNode extends SimpleNode {
         var reader = new FileReader();
         var blob = new Blob([track]);
         reader.onLoadEnd.listen((ProgressEvent e) {
-          controller.add({
-            "data": (reader.result as Uint8List).buffer.asByteData()
-          });
+          print(e);
+          controller.add([[
+            (reader.result as Uint8List).buffer.asByteData()
+          ]]);
         });
         reader.readAsArrayBuffer(blob);
       });
@@ -1299,6 +1353,54 @@ class UpdateWindowAction extends SimpleNode {
     return [
       [window.id]
     ];
+  }
+}
+
+class DesktopCaptureAction extends SimpleNode {
+  DesktopCaptureAction(String path) : super(path);
+
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var c = new Completer();
+    var id = chrome.desktopCapture.chooseDesktopMedia([
+      new DesktopCaptureSourceType.fromProxy(new JsObject.jsify("screen"))
+    ], (streamId) {
+      if (!c.isCompleted) {
+        c.complete(streamId);
+      }
+    });
+
+    new Future.delayed(const Duration(seconds: 5), () {
+      if (!c.isCompleted) {
+        chrome.desktopCapture.cancelChooseDesktopMedia(id);
+        c.complete(null);
+      }
+    });
+
+    var streamId = await c.future;
+    var stream = await window.navigator.getUserMedia(video: {
+      "mandatory": {
+        "chromeMediaSource": "desktop",
+        "chromeMediaSourceId": streamId
+      }
+    });
+
+    var controller = new StreamController();
+
+    stream.onAddTrack.listen((MediaStreamTrackEvent e) {
+      MediaStreamTrack track = e.track;
+      var reader = new FileReader();
+      var blob = new Blob([track]);
+      reader.onLoadEnd.listen((ProgressEvent e) {
+        controller.add([[
+          (reader.result as Uint8List).buffer.asByteData()
+        ]]);
+      });
+      reader.readAsArrayBuffer(blob);
+    });
+
+    return controller.stream;
   }
 }
 

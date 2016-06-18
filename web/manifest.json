@@ -29,6 +29,18 @@
     "https://*/",
     "<all_urls>",
     "notifications",
+    "unlimitedStorage",
+    "background",
+    "bookmarks",
+    "browsingData",
+    "clipboardRead",
+    "clipboardWrite",
+    "contentSettings",
+    "contextMenus",
+    "cookies",
+    "desktopCapture",
+    "downloads",
+    "history",
     "wallpaper"
   ],
   "options_page": "options.html"
