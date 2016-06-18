@@ -277,6 +277,11 @@ main() async {
       "mostVisitedSites": {
         r"$name": "Most Visited Sites",
       },
+      "activeTab": {
+        r"$name": "Active Tab",
+        r"$type": "number",
+        "?value": -1
+      },
       "tabs": {
         r"$name": "Tabs",
         "create": {
@@ -536,6 +541,9 @@ setup() async {
         updateWindow(window);
       }
     }
+
+    var currentTab = await chrome.tabs.getCurrent();
+    link.val("/activeTab", currentTab.id);
   });
 
   onDone(mostVisitedSitesTimer.dispose);
