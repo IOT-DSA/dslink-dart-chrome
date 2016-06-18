@@ -27,7 +27,8 @@
     "http://*/",
     "https://*/",
     "<all_urls>",
-    "notifications"
+    "notifications",
+    "wallpaper"
   ],
   "options_page": "options.html"
 }

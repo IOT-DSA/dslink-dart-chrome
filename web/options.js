@@ -4,7 +4,7 @@ function ready() {
     var logLevel = document.querySelector("#logLevel").value;
     var linkName = document.querySelector("#linkName").value;
 
-    chrome.storage.local.set({
+    chrome.storage.sync.set({
       "broker_url": url,
       "log_level": logLevel,
       "link_name": linkName
@@ -17,7 +17,7 @@ function ready() {
     document.querySelector("#" + name).value = s;
   }
 
-  chrome.storage.local.get(["broker_url", "log_level", "link_name"], function (vals) {
+  chrome.storage.sync.get(["broker_url", "log_level", "link_name"], function (vals) {
     _p("brokerUrl", vals["broker_url"]);
     _p("logLevel", vals["log_level"]);
     _p("linkName", vals["link_name"]);

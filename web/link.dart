@@ -23,24 +23,24 @@ class ChromeLocalStorageDataStore extends DataStorage {
 
   @override
   Future<String> get(String key) async {
-    return (await chrome.storage.local.get(key))[key];
+    return (await chrome.storage.sync.get(key))[key];
   }
 
   @override
   Future<bool> has(String key) async {
-    return (await chrome.storage.local.get())[key];
+    return (await chrome.storage.sync.get())[key];
   }
 
   @override
   Future<String> remove(String key) async {
     var value = await get(key);
-    await chrome.storage.local.remove(key);
+    await chrome.storage.sync.remove(key);
     return value;
   }
 
   @override
   Future store(String key, String value) async {
-    await chrome.storage.local.set({
+    await chrome.storage.sync.set({
       key: value
     });
   }
@@ -59,20 +59,23 @@ done() {
 }
 
 main() async {
+  onDone(chrome.storage.onChanged.listen((e) {
+    if (e.areaName == "sync") {
+      if (const [
+        "broker_url",
+        "link_name",
+        "log_level"
+      ].any((x) => e.changes.containsKey(x))) {
+        reload();
+      }
+    }
+  }).cancel);
+
   onDone(chrome.extension.onRequest.listen((chrome.OnRequestEvent e) {
     print("Received Request: ${e.request}");
 
     if (e.request == "reload") {
-      try {
-        for (var x in tabCaptures.keys) {
-          tabCaptures[x].stream.stop();
-        }
-
-        done();
-      } catch (e) {}
-
-      link.close();
-      main();
+      reload();
     }
 
     if (e.sendResponse != null) {
@@ -80,29 +83,36 @@ main() async {
     }
   }).cancel);
 
-  if (await ChromeLocalStorageDataStore.INSTANCE.has("log_level")) {
-    updateLogLevel(await ChromeLocalStorageDataStore.INSTANCE.get("log_level"));
-  } else {
-    await ChromeLocalStorageDataStore.INSTANCE.store("log_level", "INFO");
+  var store = await chrome.storage.sync.get();
+  var replace = {};
+
+  if (store["broker_url"] is! String) {
+    replace["broker_url"] = "http://127.0.0.1:8080/conn";
   }
 
+  if (store["log_level"] is! String) {
+    replace["log_level"] = "INFO";
+  }
+
+  if (store["link_name"] is! String) {
+    replace["link_name"] = "Chrome";
+  }
+
+  if (replace.isNotEmpty) {
+    await chrome.storage.sync.set(replace);
+  }
+
+  updateLogLevel(await ChromeLocalStorageDataStore.INSTANCE.get("log_level"));
   var brokerUrl = await ChromeLocalStorageDataStore.INSTANCE.get("broker_url");
-
-  if (brokerUrl == null) {
-    brokerUrl = "http://127.0.0.1:8080/conn";
-    await ChromeLocalStorageDataStore.INSTANCE.store("broker_url", brokerUrl);
-  }
-
   var linkName = await ChromeLocalStorageDataStore.INSTANCE.get("link_name");
 
-  if (linkName == null) {
-    linkName = "Chrome";
-    await ChromeLocalStorageDataStore.INSTANCE.store("link_name", "Chrome");
+  if (!linkName.endsWith("-")) {
+    linkName += "-";
   }
 
   link = new LinkProvider(
     brokerUrl,
-    "${linkName}-",
+    linkName,
     defaultNodes: {
       "openTab": {
         r"$is": "openTab",
@@ -233,6 +243,19 @@ main() async {
   await link.init();
   await setup();
   await link.connect();
+}
+
+reload() async {
+  try {
+    for (var x in tabCaptures.keys) {
+      tabCaptures[x].stream.stop();
+    }
+
+    done();
+  } catch (e) {}
+
+  link.close();
+  main();
 }
 
 Timer timer;
