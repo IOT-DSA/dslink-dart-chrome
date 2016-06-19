@@ -414,6 +414,7 @@ main() async {
       "createWindow": (String path) => new CreateWindowAction(path),
       "updateWindow": (String path) => new UpdateWindowAction(path),
       "closeTab": (String path) => new CloseTabAction(path),
+      "reloadTab": (String path) => new ReloadTabAction(path),
       "updateNotification": (String path) => new UpdateNotificationAction(path),
       "cancelNotification": (String path) => new CancelNotificationAction(path),
       "clearAllNotifications": (String path) => new ClearAllNotificationsAction(path),
@@ -685,6 +686,13 @@ setup() async {
         r"$params": [],
         r"$columns": [],
         r"$is": "closeTab"
+      },
+      "reload": {
+        r"$name": "Reload",
+        r"$invokable": "write",
+        r"$params": [],
+        r"$columns": [],
+        r"$is": "reloadTab"
       },
       "update": {
         r"$name": "Update",
@@ -1259,6 +1267,16 @@ class CloseTabAction extends SimpleNode {
   onInvoke(Map<String, dynamic> params) async {
     var id = num.parse(path.split("/")[2]).toInt();
     chrome.tabs.remove(id);
+  }
+}
+
+class ReloadTabAction extends SimpleNode {
+  ReloadTabAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) async {
+    var id = num.parse(path.split("/")[2]).toInt();
+    chrome.tabs.reload(id);
   }
 }
 
