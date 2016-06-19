@@ -579,7 +579,7 @@ setup() async {
       }
     }
 
-    var currentTab = await chrome.tabs.getCurrent();
+    var currentTab = await chrome.tabs.getSelected();
 
     if (currentTab != null) {
       uv("/activeTab", currentTab.id);
