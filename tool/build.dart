@@ -16,6 +16,15 @@ build() async {
     print("Failed to build extension.");
     exit(1);
   }
+
+  Directory.current = new Directory("build/web");
+  var result = await Process.run("zip", ["-r", "../DSA.zip", "."]);
+  if (result.exitCode != 0) {
+    print("Failed to ZIP.");
+    print("${result.stdout}\n\n${result.stderr}");
+    exit(1);
+  }
+  Directory.current = new Directory("../..");
 }
 
 package() async {
@@ -66,15 +75,20 @@ File findChromeExecutable() {
   if (Platform.isMacOS) {
     var appDir = new Directory("/Applications");
     var chromeApps = appDir.listSync()
-      .where((it) => it is Directory && it.path.endsWith(".app") && it.path.contains("Google Chrome"))
-      .toList();
+      .where((it) => it is Directory &&
+        it.path.endsWith(".app") &&
+        it.path.contains("Google Chrome")
+    ).toList();
 
     if (chromeApps.isEmpty) {
       executableNotFound();
     }
 
     var exeDir = new Directory("${chromeApps.first.path}/Contents/MacOS/");
-    var exes = exeDir.listSync().where((it) => it is File && it.path.contains("Google Chrome")).toList();
+    var exes = exeDir.listSync().where(
+      (it) => it is File &&
+        it.path.contains("Google Chrome")
+    ).toList();
     if (exes.isEmpty) {
       executableNotFound();
     }
