@@ -122,6 +122,48 @@ main() async {
     linkName += "-";
   }
 
+  HTML.window.addEventListener("gamepadconnected", (event) {
+    var gamepad = HTML.window.navigator.getGamepads()[event.gamepad.index];
+    var gamepadStructure = {};
+    var i = 0;
+    gamepad.buttons.forEach((button) {
+      gamepadStructure["button_$i"] = {
+        r"$name": "Button $i",
+        r"$type": "number"
+      };
+      i++;
+    });
+    i = 0;
+    gamepad.axes.forEach((axis) {
+      gamepadStructure["axis_$i"] = {
+        r"$name": "Axis $i",
+        r"$type": "number"
+      };
+      i++;
+    });
+    link.addNode("/gamepads/${event.gamepad.index}", gamepadStructure);
+  });
+
+  HTML.window.addEventListener("gamepaddisconnected", (event) {
+    link.removeNode("/gamepads/${event.gamepad.index}");
+  });
+
+  new Timer.periodic(new Duration(milliseconds: 16), (timer) {
+    HTML.window.navigator.getGamepads().forEach((gamepad) {
+      if (gamepad == null) return;
+      var i = 0;
+      gamepad.buttons.forEach((button) {
+        uv("/gamepads/${gamepad.index}/button_$i", button.value);
+        i++;
+      });
+      i = 0;
+      gamepad.axes.forEach((axis) {
+        uv("/gamepads/${gamepad.index}/axis_$i", axis);
+        i++;
+      });
+    });
+  });
+
   link = new LinkProvider(
     brokerUrl,
     linkName,
@@ -398,6 +440,9 @@ main() async {
           r"$name": "Email",
           r"$type": "string"
         }
+      },
+      "gamepads": {
+        r"$name": "Gamepads"
       }
     },
     profiles: {
