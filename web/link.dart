@@ -529,7 +529,11 @@ class ChromeIMEManager {
   int currentContextID;
 
   void init() {
-    if (!chrome.input.ime.available) {
+    try {
+      if (!chrome.input.ime.available) {
+        return;
+      }
+    } catch (e) {
       return;
     }
 
