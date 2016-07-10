@@ -148,7 +148,7 @@ main() async {
     link.removeNode("/gamepads/${event.gamepad.index}");
   });
 
-  new Timer.periodic(new Duration(milliseconds: 16), (timer) {
+  new Timer.periodic(const Duration(milliseconds: 16), (timer) {
     HTML.window.navigator.getGamepads().forEach((gamepad) {
       if (gamepad == null) return;
       var i = 0;
