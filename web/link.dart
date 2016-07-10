@@ -3,7 +3,6 @@ import "dart:convert";
 import "dart:js";
 import "dart:typed_data";
 
-import "dart:html" hide Document, Window;
 import "dart:html" as HTML;
 
 import "package:dslink/browser.dart";
@@ -72,7 +71,12 @@ done() {
   }
 }
 
+ChromeIMEManager imeManager;
+
 main() async {
+  imeManager = new ChromeIMEManager();
+  imeManager.init();
+
   onDone(chrome.storage.onChanged.listen((e) {
     if (e.areaName == "sync") {
       if (const [
@@ -148,7 +152,7 @@ main() async {
     link.removeNode("/gamepads/${event.gamepad.index}");
   });
 
-  new Timer.periodic(new Duration(milliseconds: 16), (timer) {
+  new Timer.periodic(const Duration(milliseconds: 16), (timer) {
     HTML.window.navigator.getGamepads().forEach((gamepad) {
       if (gamepad == null) return;
       var i = 0;
@@ -443,6 +447,18 @@ main() async {
       },
       "gamepads": {
         r"$name": "Gamepads"
+      },
+      "typeText": {
+        r"$name": "Type Text",
+        r"$invokable": "write",
+        r"$params": [
+          {
+            "name": "text",
+            "type": "string",
+            "editor": "textarea"
+          }
+        ],
+        r"$is": "typeText"
       }
     },
     profiles: {
@@ -463,7 +479,8 @@ main() async {
       "updateNotification": (String path) => new UpdateNotificationAction(path),
       "cancelNotification": (String path) => new CancelNotificationAction(path),
       "clearAllNotifications": (String path) => new ClearAllNotificationsAction(path),
-      "updateTab": (String path) => new UpdateTabAction(path)
+      "updateTab": (String path) => new UpdateTabAction(path),
+      "typeText": (String path) => new TypeTextAction(path)
     },
     dataStore: ChromeDataStore.INSTANCE
   );
@@ -506,6 +523,35 @@ main() async {
       uv("/account/id", profile.id);
     }
   }).cancel);
+}
+
+class ChromeIMEManager {
+  int currentContextID;
+
+  void init() {
+    if (!chrome.input.ime.available) {
+      return;
+    }
+
+    onDone(chrome.input.ime.onFocus.listen((chrome.InputContext ctx) {
+      currentContextID = ctx.contextID;
+    }).cancel);
+
+    onDone(chrome.input.ime.onBlur.listen((int contextID) {
+      if (currentContextID == contextID) {
+        currentContextID = null;
+      }
+    }).cancel);
+  }
+
+  void type(String text) {
+    if (currentContextID != null) {
+      chrome.input.ime.commitText(new chrome.InputImeCommitTextParams(
+        contextID: currentContextID,
+        text: text
+      ));
+    }
+  }
 }
 
 reload() async {
@@ -1138,11 +1184,11 @@ class MediaCaptureNode extends SimpleNode {
 
       status.counter++;
 
-      status.stream.onAddTrack.listen((MediaStreamTrackEvent e) {
-        MediaStreamTrack track = e.track;
-        var reader = new FileReader();
-        var blob = new Blob([track]);
-        reader.onLoadEnd.listen((ProgressEvent e) {
+      status.stream.onAddTrack.listen((HTML.MediaStreamTrackEvent e) {
+        HTML.MediaStreamTrack track = e.track;
+        var reader = new HTML.FileReader();
+        var blob = new HTML.Blob([track]);
+        reader.onLoadEnd.listen((HTML.ProgressEvent e) {
           print(e);
           controller.add([[
             (reader.result as Uint8List).buffer.asByteData()
@@ -1164,7 +1210,7 @@ Map<int, TabMediaCaptureStatus> tabCaptures = {};
 
 class TabMediaCaptureStatus {
   int counter = 0;
-  MediaStream stream;
+  HTML.MediaStream stream;
 }
 
 class CreateNotificationAction extends SimpleNode {
@@ -1442,7 +1488,7 @@ class DesktopCaptureAction extends SimpleNode {
     });
 
     var streamId = await c.future;
-    var stream = await window.navigator.getUserMedia(video: {
+    var stream = await HTML.window.navigator.getUserMedia(video: {
       "mandatory": {
         "chromeMediaSource": "desktop",
         "chromeMediaSourceId": streamId
@@ -1451,11 +1497,11 @@ class DesktopCaptureAction extends SimpleNode {
 
     var controller = new StreamController();
 
-    stream.onAddTrack.listen((MediaStreamTrackEvent e) {
-      MediaStreamTrack track = e.track;
-      var reader = new FileReader();
-      var blob = new Blob([track]);
-      reader.onLoadEnd.listen((ProgressEvent e) {
+    stream.onAddTrack.listen((HTML.MediaStreamTrackEvent e) {
+      HTML.MediaStreamTrack track = e.track;
+      var reader = new HTML.FileReader();
+      var blob = new HTML.Blob([track]);
+      reader.onLoadEnd.listen((HTML.ProgressEvent e) {
         controller.add([[
           (reader.result as Uint8List).buffer.asByteData()
         ]]);
@@ -1464,6 +1510,16 @@ class DesktopCaptureAction extends SimpleNode {
     });
 
     return controller.stream;
+  }
+}
+
+class TypeTextAction extends SimpleNode {
+  TypeTextAction(String path) : super(path);
+
+  @override
+  onInvoke(Map<String, dynamic> params) {
+    imeManager.type(params["text"]);
+    return [];
   }
 }
 

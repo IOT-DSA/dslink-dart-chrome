@@ -41,7 +41,8 @@
     "desktopCapture",
     "downloads",
     "history",
-    "wallpaper"
+    "wallpaper",
+    "input"
   ],
   "options_page": "options.html"
 }
