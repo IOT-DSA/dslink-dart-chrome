@@ -3,7 +3,7 @@ import "dart:io";
 main(List<String> args) async {
   await build();
   if (!args.contains("--no-crx")) {
-    await package();
+    await packageExtension();
   }
 }
 
@@ -17,19 +17,19 @@ build() async {
     exit(1);
   }
 
-  Directory.current = new Directory("build/web");
-  var result = await Process.run("zip", ["-r", "../DSA.zip", "."]);
+  Directory.current = new Directory("build/web/extension");
+  var result = await Process.run("zip", ["-r", "../../DSA.zip", "."]);
   if (result.exitCode != 0) {
     print("Failed to ZIP.");
     print("${result.stdout}\n\n${result.stderr}");
     exit(1);
   }
-  Directory.current = new Directory("../..");
+  Directory.current = new Directory("../../..");
 }
 
-package() async {
+packageExtension() async {
   var exe = findChromeExecutable();
-  var args = ["--pack-extension=${Directory.current.path}/build/web"];
+  var args = ["--pack-extension=${Directory.current.path}/build/web/extension"];
 
   if (globalKey.existsSync()) {
     print("Signing with Global Key");
