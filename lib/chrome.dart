@@ -51,4 +51,6 @@ part "src/profile.dart";
 part "src/done.dart";
 part "src/gamepads.dart";
 
+final String COMPANION_APP_ID = "ggikobigknjapmebobpegnbkncgofgie";
+
 Disposable updateTimer;

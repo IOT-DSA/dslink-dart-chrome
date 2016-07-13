@@ -17,14 +17,27 @@ build() async {
     exit(1);
   }
 
-  Directory.current = new Directory("build/web/extension");
-  var result = await Process.run("zip", ["-r", "../../DSA.zip", "."]);
-  if (result.exitCode != 0) {
-    print("Failed to ZIP.");
-    print("${result.stdout}\n\n${result.stderr}");
-    exit(1);
+  {
+    Directory.current = new Directory("build/web/extension");
+    var result = await Process.run("zip", ["-r", "../../DSA.zip", "."]);
+    if (result.exitCode != 0) {
+      print("Failed to ZIP.");
+      print("${result.stdout}\n\n${result.stderr}");
+      exit(1);
+    }
+    Directory.current = new Directory("../../..");
   }
-  Directory.current = new Directory("../../..");
+
+  {
+    Directory.current = new Directory("build/web/app");
+    var result = await Process.run("zip", ["-r", "../../DSA_Companion.zip", "."]);
+    if (result.exitCode != 0) {
+      print("Failed to ZIP.");
+      print("${result.stdout}\n\n${result.stderr}");
+      exit(1);
+    }
+    Directory.current = new Directory("../../..");
+  }
 }
 
 packageExtension() async {
