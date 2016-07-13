@@ -4,7 +4,7 @@
   "minimum_chrome_version": "40",
   "manifest_version": 2,
   "background": {
-    "scripts": ["link.dart.js"],
+    "scripts": ["extension.dart.js"],
     "persistent": true
   },
   "icons": {
