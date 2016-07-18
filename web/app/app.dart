@@ -9,15 +9,21 @@ typedef MsgHandler(chrome.OnMessageEvent e, chrome.Port port, Map<String, dynami
 
 Map<String, Function> _msgHandlers = {};
 List<chrome.BluetoothDevice> _bluetoothDevices = [];
+List<chrome.MdnsService> _mdnsServices = [];
 List<chrome.Port> _ports = [];
 
 void pub(m, [id]) {
   print("Publish ${m}");
-  for (chrome.Port port in _ports) {
+  for (chrome.Port port in _ports.toList()) {
     if (id != null && port.sender.id != id) {
       continue;
     }
-    port.postMessage(m);
+
+    try {
+      port.postMessage(m);
+    } catch (e) {
+      _ports.remove(port);
+    }
   }
 }
 
@@ -118,6 +124,40 @@ main() async {
     chrome.bluetooth.stopDiscovery();
   };
 
+  _msgHandlers["mdns.discover"] = (chrome.OnMessageEvent e, chrome.Port port, m) {
+    chrome.mdns.forceDiscovery();
+  };
+
+  _msgHandlers["mdns.sync"] = (chrome.OnMessageEvent e, chrome.Port port, m) {
+    for (chrome.MdnsService service in _mdnsServices) {
+      pub({
+        "type": "mdns.services.added"
+      }..addAll(buildMdnsServiceInfo(service)));
+    }
+  };
+
+  onDone(chrome.mdns.onServiceList.listen((List<chrome.MdnsService> services) {
+    bool match(chrome.MdnsService a, chrome.MdnsService b) {
+      return a.ipAddress == b.ipAddress && a.serviceHostPort == b.serviceHostPort && a.serviceName == b.serviceName;
+    };
+    var newServices = services.where((s) => !_mdnsServices.any((n) => match(s, n))).toList();
+    var goneServices = _mdnsServices.where((s) => !services.any((n) => match(s, n))).toList();
+
+    for (chrome.MdnsService service in goneServices) {
+      pub({
+        "type": "mdns.services.removed"
+      }..addAll(buildMdnsServiceInfo(service)));
+    }
+
+    for (chrome.MdnsService service in newServices) {
+      pub({
+        "type": "mdns.services.added"
+      }..addAll(buildMdnsServiceInfo(service)));
+    }
+
+    _mdnsServices = services;
+  }).cancel);
+
   onDone(() {
     _msgHandlers.clear();
     _bluetoothDevices.clear();
@@ -140,6 +180,14 @@ Map<String, dynamic> buildBluetoothDeviceInfo(chrome.BluetoothDevice device) {
     "connected": device.connected,
     "connecting": device.connecting,
     "deviceType": device.type.value
+  };
+}
+
+Map<String, dynamic> buildMdnsServiceInfo(chrome.MdnsService service) {
+  return {
+    "name": service.serviceName,
+    "address": service.ipAddress,
+    "port": service.serviceHostPort
   };
 }
 

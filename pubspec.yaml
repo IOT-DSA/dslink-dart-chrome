@@ -3,7 +3,7 @@ description: DSLink for Chrome
 dependencies:
   browser: any
   chrome:
-    git: https://github.com/dart-gde/chrome.dart.git
+    git: https://github.com/IOT-DSA/chrome.dart.git
   dslink:
     git: https://github.com/IOT-DSA/sdk-dslink-dart.git
   crypto: ">=0.9.0 <1.0.0"

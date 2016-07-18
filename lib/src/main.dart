@@ -399,6 +399,9 @@ main() async {
       }),
       "stopBluetoothDiscovery": (String path) => new SimpleActionNode(path, (Map<String, dynamic> m) {
         stopBluetoothDiscover();
+      }),
+      "mdnsDiscover": (String path) => new SimpleActionNode(path, (Map<String, dynamic> m) {
+        forceMdnsDiscover();
       })
     },
     dataStore: ChromeDataStore.INSTANCE

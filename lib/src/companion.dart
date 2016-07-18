@@ -96,6 +96,18 @@ setupCompanionNow() async {
     }
   });
 
+  link.addNode("/mdns", {
+    r"$name": "MDNS",
+    "discover": {
+      r"$name": "Discover",
+      r"$invokable": "read",
+      r"$is": "mdnsDiscover"
+    },
+    "services": {
+      r"$name": "Services"
+    }
+  });
+
   _companionHandlers["bluetooth.device.added"] = (chrome.OnMessageEvent e, m) {
     if (m["device"] is Map) {
       Map device = m["device"];
@@ -169,6 +181,40 @@ setupCompanionNow() async {
     }
   };
 
+  _companionHandlers["mdns.services.added"] = (chrome.OnMessageEvent e, m) {
+    String name = m["name"];
+    String address = m["address"];
+    int port = m["port"];
+    String rname = NodeNamer.createName("${name}:${address}:${port}");
+    var node = link.getNode("/mdns/services/${rname}");
+    if (node == null) {
+      node = link.addNode("/mdns/services/${rname}", {
+        r"$name": name,
+        "name": {
+          r"$name": "Name",
+          r"$type": "string"
+        },
+        "address": {
+          r"$name": "Address",
+          r"$type": "string"
+        },
+        "port": {
+          r"$name": "Port",
+          r"$type": "number"
+        }
+      });
+    }
+  };
+
+  _companionHandlers["mdns.services.removed"] = (chrome.OnMessageEvent e, m) {
+    String name = m["name"];
+    String address = m["address"];
+    int port = m["port"];
+    String rname = NodeNamer.createName("${name}:${address}:${port}");
+
+    link.removeNode("/mdns/services/${rname}");
+  };
+
   _companionHandlers["bluetooth.device.changed"] = (chrome.OnMessageEvent e, m) {
     if (m["device"] is Map) {
       Map device = m["device"];
@@ -214,6 +260,10 @@ setupCompanionNow() async {
   _companion.postMessage({
     "type": "bluetooth.sync"
   });
+
+  _companion.postMessage({
+    "type": "mdns.sync"
+  });
 }
 
 startBluetoothDiscover() {
@@ -228,6 +278,14 @@ stopBluetoothDiscover() {
   if (_companion != null) {
     _companion.postMessage({
       "type": "bluetooth.discovery.stop"
+    });
+  }
+}
+
+forceMdnsDiscover() {
+  if (_companion != null) {
+    _companion.postMessage({
+      "type": "mdns.discover"
     });
   }
 }
