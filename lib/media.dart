@@ -26,7 +26,7 @@ class DesktopCaptureAction extends SimpleNode {
   onInvoke(Map<String, dynamic> params) async {
     var c = new Completer();
     var id = chrome.desktopCapture.chooseDesktopMedia([
-      new DesktopCaptureSourceType.fromProxy(new JsObject.jsify("screen"))
+      DesktopCaptureSourceType.SCREEN
     ], (streamId) {
       if (!c.isCompleted) {
         c.complete(streamId);

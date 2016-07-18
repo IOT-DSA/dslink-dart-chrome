@@ -9,7 +9,10 @@ class SetWallpaperUrlNode extends SimpleNode {
     chrome.wallpaper.setWallpaper(
       new WallpaperSetWallpaperParams(
         url: params["Url"],
-        layout: new WallpaperLayout.fromProxy(new JsObject.jsify(layout))
+        layout: WallpaperLayout.VALUES.firstWhere((l) =>
+          l.value.toLowerCase() == layout.toString().toLowerCase(),
+          orElse: () => WallpaperLayout.STRETCH
+        )
       )
     );
     return [];

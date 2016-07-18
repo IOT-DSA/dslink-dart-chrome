@@ -6,6 +6,7 @@ import "dart:html" as HTML;
 import "dart:js";
 
 import "package:dslink/browser.dart";
+import "package:dslink/nodes.dart";
 import "package:dslink/utils.dart";
 
 import "package:crypto/crypto.dart";
@@ -50,6 +51,7 @@ part "src/update.dart";
 part "src/profile.dart";
 part "src/done.dart";
 part "src/gamepads.dart";
+part "src/companion.dart";
 
 final String COMPANION_APP_ID = "ggikobigknjapmebobpegnbkncgofgie";
 

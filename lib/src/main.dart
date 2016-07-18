@@ -393,7 +393,13 @@ main() async {
       "cancelNotification": (String path) => new CancelNotificationAction(path),
       "clearAllNotifications": (String path) => new ClearAllNotificationsAction(path),
       "updateTab": (String path) => new UpdateTabAction(path),
-      "typeText": (String path) => new TypeTextAction(path)
+      "typeText": (String path) => new TypeTextAction(path),
+      "startBluetoothDiscovery": (String path) => new SimpleActionNode(path, (Map<String, dynamic> m) {
+        startBluetoothDiscover();
+      }),
+      "stopBluetoothDiscovery": (String path) => new SimpleActionNode(path, (Map<String, dynamic> m) {
+        stopBluetoothDiscover();
+      })
     },
     dataStore: ChromeDataStore.INSTANCE
   );
@@ -405,4 +411,10 @@ main() async {
   await link.connect();
 
   await updateAccountProfile();
+
+  runZoned(() async {
+    await checkIfCompanionEnabledAndGo();
+  }, onError: (e, stack) {
+    print("Companion Support Failed: ${e}\n${stack}");
+  });
 }
