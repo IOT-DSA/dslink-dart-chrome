@@ -1,6 +1,6 @@
 {
   "name": "DSA",
-  "version": "10",
+  "version": "11",
   "minimum_chrome_version": "40",
   "manifest_version": 2,
   "background": {
