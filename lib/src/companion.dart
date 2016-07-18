@@ -204,6 +204,9 @@ setupCompanionNow() async {
         }
       });
     }
+    uv("${node.path}/name", name);
+    uv("${node.path}/address", address);
+    uv("${node.path}/port", port);
   };
 
   _companionHandlers["mdns.services.removed"] = (chrome.OnMessageEvent e, m) {
