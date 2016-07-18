@@ -40,6 +40,30 @@ main() async {
       replace["link_name"] = "Chrome";
     }
 
+    if (store["enableBrowserAccess"] is! String) {
+      replace["enableBrowserAccess"] = "true";
+    }
+
+    if (store["enableSpeechAccess"] is! String) {
+      replace["enableSpeechAccess"] = "true";
+    }
+
+    if (store["enableInputAccess"] is! String) {
+      replace["enableInputAccess"] = "true";
+    }
+
+    if (store["enableNotificationAccess"] is! String) {
+      replace["enableNotificationAccess"] = "true";
+    }
+
+    if (store["enableWallpaperAccess"] is! String) {
+      replace["enableWallpaperAccess"] = "true";
+    }
+
+    if (store["enableGamepadAccess"] is! String) {
+      replace["enableGamepadAccess"] = "true";
+    }
+
     if (replace.isNotEmpty) {
       await chrome.storage.sync.set(replace);
     }
@@ -48,38 +72,41 @@ main() async {
   updateLogLevel(await ChromeDataStore.INSTANCE.get("log_level"));
   var brokerUrl = await ChromeDataStore.INSTANCE.get("broker_url");
   var linkName = await ChromeDataStore.INSTANCE.get("link_name");
+  enableBrowserAccess = (await ChromeDataStore.INSTANCE.get("enableBrowserAccess")) == "true";
 
   if (!linkName.endsWith("-")) {
     linkName += "-";
   }
 
-  onDone(HTML.window.on["gamepadconnected"].listen((event) {
-    var gamepad = HTML.window.navigator.getGamepads()[event.gamepad.index];
-    var gamepadStructure = {};
-    var i = 0;
-    gamepad.buttons.forEach((button) {
-      gamepadStructure["button_$i"] = {
-        r"$name": "Button $i",
-        r"$type": "number"
-      };
-      i++;
-    });
-    i = 0;
-    gamepad.axes.forEach((axis) {
-      gamepadStructure["axis_$i"] = {
-        r"$name": "Axis $i",
-        r"$type": "number"
-      };
-      i++;
-    });
-    link.addNode("/gamepads/${event.gamepad.index}", gamepadStructure);
-  }).cancel);
+  if (enableGamepadAccess) {
+    onDone(HTML.window.on["gamepadconnected"].listen((event) {
+      var gamepad = HTML.window.navigator.getGamepads()[event.gamepad.index];
+      var gamepadStructure = {};
+      var i = 0;
+      gamepad.buttons.forEach((button) {
+        gamepadStructure["button_$i"] = {
+          r"$name": "Button $i",
+          r"$type": "number"
+        };
+        i++;
+      });
+      i = 0;
+      gamepad.axes.forEach((axis) {
+        gamepadStructure["axis_$i"] = {
+          r"$name": "Axis $i",
+          r"$type": "number"
+        };
+        i++;
+      });
+      link.addNode("/gamepads/${event.gamepad.index}", gamepadStructure);
+    }).cancel);
 
-  onDone(HTML.window.on["gamepaddisconnected"].listen((event) {
-    link.removeNode("/gamepads/${event.gamepad.index}");
-  }).cancel);
+    onDone(HTML.window.on["gamepaddisconnected"].listen((event) {
+      link.removeNode("/gamepads/${event.gamepad.index}");
+    }).cancel);
 
-  setupGamepadLoop();
+    setupGamepadLoop();
+  }
 
   link = new LinkProvider(
     brokerUrl,
@@ -407,9 +434,40 @@ main() async {
     dataStore: ChromeDataStore.INSTANCE
   );
 
-  await setupWallpaperSupport();
-
   await link.init();
+
+  if (enableWallpaperAccess) {
+    await setupWallpaperSupport();
+  }
+
+  if (!enableGamepadAccess) {
+    link.removeNode("/gamepads");
+  }
+
+  if (!enableBrowserAccess) {
+    link.removeNode("/windows");
+    link.removeNode("/tabs");
+    link.removeNode("/mostVisitedSites");
+    link.removeNode("/activeTab");
+    link.removeNode("/readDesktopStream");
+  }
+
+  if (!enableInputAccess) {
+    link.removeNode("/typeText");
+  }
+
+  if (!enableNotificationAccess) {
+    link.removeNode("/createNotification");
+    link.removeNode("/cancelNotification");
+    link.removeNode("/updateNotification");
+    link.removeNode("/clearAllNotifications");
+  }
+
+  if (!enableSpeechAccess) {
+    link.removeNode("/speak");
+    link.removeNode("/cancelSpeech");
+  }
+
   await setup();
   await link.connect();
 

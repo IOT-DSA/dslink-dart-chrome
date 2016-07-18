@@ -20,7 +20,7 @@ class SetWallpaperUrlNode extends SimpleNode {
 }
 
 setupWallpaperSupport() async {
-  if (chrome.wallpaper.available) {
+  if (chrome.wallpaper.available && enableWallpaperAccess) {
     link.defaultNodes["setWallpaperUrl"] = {
       r"$name": "Set Wallpaper Url",
       r"$is": "setWallpaperUrl",
